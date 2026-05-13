@@ -1,0 +1,51 @@
+Temple4 License Notice
+======================
+
+Temple4 project files are licensed under the GNU General Public License,
+version 3 or later.
+
+This covers the Temple4 build scripts, project documentation, project-specific
+configuration, and Temple4 branding assets in this repository, except where a
+file or directory clearly states a different license.
+
+SPDX-License-Identifier: GPL-3.0-or-later
+
+Third-party components
+----------------------
+
+This repository and the generated Temple4 ISO include third-party free software
+components from Debian GNU/Linux, GNU, Linux-libre, GRUB, Syslinux, QEMU-related
+payloads, and other upstream projects. Those components are not relicensed by
+Temple4. They remain under their original upstream licenses.
+
+In particular:
+
+- Linux-libre is based on the Linux kernel and is distributed under GPL-2.0.
+- Debian packages are distributed under their individual package licenses.
+- GNU components are distributed under their individual GNU project licenses.
+- Bootloader files, package payloads, ISOs, and other bundled artifacts retain
+  their upstream license terms.
+
+For installed package license details in a built system, see package copyright
+files under:
+
+    /usr/share/doc/*/copyright
+
+Common license texts are normally available in:
+
+    /usr/share/common-licenses
+
+Source availability
+-------------------
+
+Temple4 is an aggregate distribution image assembled from free software
+components. When distributing Temple4 ISO images, provide access to this source
+repository and to the corresponding upstream source packages for included
+third-party components, as required by their licenses.
+
+Debian source packages can be retrieved with Debian tooling such as:
+
+    apt source <package-name>
+
+Linux-libre source is available from the GNU/Linux-libre project and its
+published mirrors.

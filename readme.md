@@ -261,6 +261,16 @@ The scripts check that they are running in WSL and print package-install hints
 when a required command is missing. Set `ALLOW_NON_WSL=1` only if you
 intentionally want to run the same scripts on a regular Linux host.
 
+## License
+
+Temple4 project scripts, documentation, configuration, and branding assets are
+licensed under `GPL-3.0-or-later` unless a file states otherwise.
+
+Temple4 also includes third-party free software from Debian GNU/Linux, GNU,
+Linux-libre, GRUB, Syslinux, and other upstream projects. Those components keep
+their original upstream licenses. See [LICENSE](LICENSE) and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
+
 
 ## Project Goal
 

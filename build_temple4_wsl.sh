@@ -107,6 +107,13 @@ soft_rebrand_iso_root() {
         mkdir -p "$ISO_ROOT/Temple4"
         cp -a "$CIA_DIR"/. "$ISO_ROOT/Temple4"/
     fi
+
+    mkdir -p "$ISO_ROOT/Temple4"
+    for notice_file in LICENSE THIRD_PARTY_NOTICES.md; do
+        if [ -f "$SCRIPT_DIR/$notice_file" ]; then
+            cp "$SCRIPT_DIR/$notice_file" "$ISO_ROOT/Temple4/$notice_file"
+        fi
+    done
 }
 
 mounted_chroot_paths=()
@@ -163,6 +170,13 @@ write_livefs_launchers() {
         "$root/etc/skel/Desktop" \
         "$root/usr/local/bin" \
         "$root/usr/share/applications"
+
+    mkdir -p "$root/usr/share/doc/temple4"
+    for notice_file in LICENSE THIRD_PARTY_NOTICES.md; do
+        if [ -f "$SCRIPT_DIR/$notice_file" ]; then
+            cp "$SCRIPT_DIR/$notice_file" "$root/usr/share/doc/temple4/$notice_file"
+        fi
+    done
 
     if [ -d "$CIA_DIR" ]; then
         cp -a "$CIA_DIR"/. "$root/etc/skel/Terry"/
@@ -667,11 +681,23 @@ strip_lite_profile() {
         -exec rm -rf {} +
 
     rm -rf \
-        "$root/usr/share/doc" \
         "$root/usr/share/man" \
         "$root/usr/share/info" \
         "$root/usr/share/help" \
         "$root/usr/share/lintian"
+
+    if [ -d "$root/usr/share/doc" ]; then
+        find "$root/usr/share/doc" -mindepth 2 -type f ! -name copyright -delete
+        find "$root/usr/share/doc" -mindepth 2 -type l ! -name copyright -delete
+        find "$root/usr/share/doc" -type d -empty -delete
+    fi
+
+    mkdir -p "$root/usr/share/doc/temple4"
+    for notice_file in LICENSE THIRD_PARTY_NOTICES.md; do
+        if [ -f "$SCRIPT_DIR/$notice_file" ]; then
+            cp "$SCRIPT_DIR/$notice_file" "$root/usr/share/doc/temple4/$notice_file"
+        fi
+    done
 
     rm -f \
         "$root/etc/apparmor.d/firefox" \
