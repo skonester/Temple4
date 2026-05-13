@@ -277,3 +277,7 @@ their original upstream licenses. See [LICENSE](LICENSE) and
 Temple4 is not a replacement for TempleOS. It is a fourth temple around it: a
 small live Debian and Linux-libre environment that makes TempleOS, ZealOS, and
 Exodus easy to boot, inspect, copy, install, and preserve from a modern desktop.
+
+## Screenshot
+
+![Temple4 desktop screenshot](screenshot.png)
