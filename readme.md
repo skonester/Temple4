@@ -4,6 +4,30 @@
   <img src="Temple4.png" alt="Temple4" width="360">
 </p>
 
+<p align="center">
+  <a href="https://github.com/skonester/Temple4/releases/latest">
+    <img alt="Download latest release" src="https://img.shields.io/badge/Download-Latest%20ISO-2ea44f?style=for-the-badge&logo=github">
+  </a>
+  <a href="https://github.com/skonester/Temple4/releases">
+    <img alt="GitHub release downloads" src="https://img.shields.io/github/downloads/skonester/Temple4/total?style=for-the-badge&logo=github">
+  </a>
+</p>
+
+<p align="center">
+  <img alt="License" src="https://img.shields.io/github/license/skonester/Temple4?style=flat-square">
+  <img alt="Repository size" src="https://img.shields.io/github/repo-size/skonester/Temple4?style=flat-square">
+  <img alt="Last commit" src="https://img.shields.io/github/last-commit/skonester/Temple4?style=flat-square">
+  <img alt="Stars" src="https://img.shields.io/github/stars/skonester/Temple4?style=flat-square">
+  <img alt="Forks" src="https://img.shields.io/github/forks/skonester/Temple4?style=flat-square">
+</p>
+
+<p align="center">
+  <img alt="Base" src="https://img.shields.io/badge/base-Debian%20Trixie-a81d33?style=flat-square">
+  <img alt="Kernel" src="https://img.shields.io/badge/kernel-GNU%20Linux--libre-4f46e5?style=flat-square">
+  <img alt="Desktop" src="https://img.shields.io/badge/desktop-XFCE-2284f2?style=flat-square">
+  <img alt="Build" src="https://img.shields.io/badge/build-WSL-0078d4?style=flat-square&logo=windows">
+</p>
+
 Temple4 is a compact live GNU/Linux system for exploring TempleOS-family
 software from a familiar modern desktop. It combines a Debian Trixie userland,
 a GNU Linux-libre kernel, XFCE, and ready-to-run launchers for TempleOS, ZealOS,
@@ -44,6 +68,12 @@ Temple4 is distributed as a downloadable ISO image. Download the current
 release ISO, write it to a USB drive, boot it on a PC or virtual machine, and
 use it as a live desktop or install it from the included installer.
 
+<p align="center">
+  <a href="https://github.com/skonester/Temple4/releases/latest">
+    <img alt="Download Temple4 ISO" src="https://img.shields.io/badge/Download%20Temple4%20ISO-Releases-2ea44f?style=for-the-badge&logo=github">
+  </a>
+</p>
+
 ```text
 Temple4.iso
 ```
@@ -52,8 +82,8 @@ Current release verification:
 
 ```text
 File: Temple4.iso
-Size: 889,260,032 bytes
-SHA256: f6124eb31b419c0881915a41de5657f4c2e8c1f70a24f97fe747dd102648cecc
+Size: 889,210,880 bytes
+SHA256: 0147f3c78dfcbc1f57ed09dfa3690c0fbad5f6882d79ece6d4806cdbacd0e00a
 ```
 
 After downloading, compare the SHA256 hash of your ISO with the value above
