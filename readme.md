@@ -9,16 +9,17 @@
     <img alt="Download latest release" src="https://img.shields.io/badge/Download-Latest%20ISO-2ea44f?style=for-the-badge&logo=github">
   </a>
   <a href="https://github.com/skonester/Temple4/releases">
-    <img alt="GitHub release downloads" src="https://img.shields.io/github/downloads/skonester/Temple4/total?style=for-the-badge&logo=github">
+    <img alt="Release archive" src="https://img.shields.io/badge/Releases-Archive-0969da?style=for-the-badge&logo=github">
   </a>
 </p>
 
 <p align="center">
-  <img alt="License" src="https://img.shields.io/github/license/skonester/Temple4?style=flat-square">
-  <img alt="Repository size" src="https://img.shields.io/github/repo-size/skonester/Temple4?style=flat-square">
-  <img alt="Last commit" src="https://img.shields.io/github/last-commit/skonester/Temple4?style=flat-square">
-  <img alt="Stars" src="https://img.shields.io/github/stars/skonester/Temple4?style=flat-square">
-  <img alt="Forks" src="https://img.shields.io/github/forks/skonester/Temple4?style=flat-square">
+  <a href="LICENSE">
+    <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square">
+  </a>
+  <img alt="ISO size" src="https://img.shields.io/badge/ISO-889%20MB-2ea44f?style=flat-square">
+  <img alt="Source storage" src="https://img.shields.io/badge/storage-Git%20LFS-f05032?style=flat-square">
+  <img alt="Build status" src="https://img.shields.io/badge/build-verified-success?style=flat-square">
 </p>
 
 <p align="center">
