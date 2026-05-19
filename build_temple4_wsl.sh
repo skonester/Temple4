@@ -15,6 +15,7 @@ WORK_DIR="${WORK_DIR:-$HOME/temple4_work}"
 ISO_ROOT="${ISO_ROOT:-$WORK_DIR/iso_root}"
 LIVE_ROOT="${LIVE_ROOT:-$WORK_DIR/squashfs-root}"
 OUTPUT_ISO="${OUTPUT_ISO:-$WORK_DIR/Temple4-quick.iso}"
+ISOHYBRID_MBR="${ISOHYBRID_MBR:-}"
 REPACK_LIVEFS="${REPACK_LIVEFS:-0}"
 STRIP_PROFILE="${STRIP_PROFILE:-none}"
 INSTALL_RUNTIME="${INSTALL_RUNTIME:-0}"
@@ -53,6 +54,29 @@ require_path() {
         echo "ERROR: required path is missing: $1" >&2
         exit 1
     fi
+}
+
+resolve_isohybrid_mbr() {
+    if [ -n "$ISOHYBRID_MBR" ]; then
+        require_path "$ISOHYBRID_MBR"
+        return
+    fi
+
+    local candidate
+    for candidate in \
+        /usr/lib/ISOLINUX/isohdpfx.bin \
+        /usr/lib/syslinux/isohdpfx.bin \
+        /usr/share/syslinux/isohdpfx.bin
+    do
+        if [ -f "$candidate" ]; then
+            ISOHYBRID_MBR="$candidate"
+            return
+        fi
+    done
+
+    echo "ERROR: Syslinux isohybrid MBR blob was not found." >&2
+    echo "Install it with your distro's syslinux package, or set ISOHYBRID_MBR=/path/to/isohdpfx.bin." >&2
+    exit 1
 }
 
 copy_tree() {
@@ -947,11 +971,13 @@ repack_livefs() {
 build_iso() {
     echo "Building ISO: $OUTPUT_ISO"
     mkdir -p "$(dirname "$OUTPUT_ISO")"
+    resolve_isohybrid_mbr
 
     xorriso -as mkisofs \
         -r -V "$VOLUME_ID" \
         -o "$OUTPUT_ISO" \
         -J -joliet-long \
+        -isohybrid-mbr "$ISOHYBRID_MBR" \
         -b isolinux/isolinux.bin \
         -c isolinux/boot.cat \
         -no-emul-boot -boot-load-size 4 -boot-info-table \

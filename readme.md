@@ -249,13 +249,13 @@ Debian or Ubuntu WSL:
 
 ```bash
 sudo apt update
-sudo apt install -y git git-lfs xorriso squashfs-tools rsync qemu-system-x86 qemu-utils ovmf
+sudo apt install -y git git-lfs xorriso squashfs-tools syslinux-common rsync qemu-system-x86 qemu-utils ovmf
 ```
 
 Fedora WSL:
 
 ```bash
-sudo dnf install -y git git-lfs xorriso squashfs-tools rsync qemu-system-x86 qemu-img edk2-ovmf
+sudo dnf install -y git git-lfs xorriso squashfs-tools syslinux rsync qemu-system-x86 qemu-img edk2-ovmf
 ```
 
 Clone the repo from inside WSL, enter it, and pull the Git LFS assets:
