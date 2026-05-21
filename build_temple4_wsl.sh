@@ -327,7 +327,7 @@ EOF
 #!/bin/sh
 set -eu
 
-for launcher in "$HOME/Desktop/TempleOS.desktop" "$HOME/Desktop/ZealOS.desktop" "$HOME/Desktop/Exodus.desktop" "$HOME/Desktop/Install Temple4.desktop"; do
+for launcher in "$HOME/Desktop/TempleOS.desktop" "$HOME/Desktop/ZealOS.desktop" "$HOME/Desktop/Exodus.desktop" "$HOME/Desktop/HolyC Demo.desktop" "$HOME/Desktop/Install Temple4.desktop"; do
     [ -f "$launcher" ] || continue
     chmod +x "$launcher" 2>/dev/null || true
     if command -v gio >/dev/null 2>&1; then
@@ -797,11 +797,14 @@ configure_default_browser() {
 
     if [ -f "$root/etc/xdg/xfce4/helpers.rc" ]; then
         sed -i 's/^WebBrowser=.*/WebBrowser=netsurf-gtk/' "$root/etc/xdg/xfce4/helpers.rc"
+        sed -i 's/^TerminalEmulator=.*/TerminalEmulator=temple4-terminal/' "$root/etc/xdg/xfce4/helpers.rc"
+        grep -q '^WebBrowser=' "$root/etc/xdg/xfce4/helpers.rc" || printf '%s\n' 'WebBrowser=netsurf-gtk' >> "$root/etc/xdg/xfce4/helpers.rc"
+        grep -q '^TerminalEmulator=' "$root/etc/xdg/xfce4/helpers.rc" || printf '%s\n' 'TerminalEmulator=temple4-terminal' >> "$root/etc/xdg/xfce4/helpers.rc"
     else
         cat > "$root/etc/xdg/xfce4/helpers.rc" <<'EOF'
 WebBrowser=netsurf-gtk
 MailReader=thunderbird
-TerminalEmulator=debian-x-terminal-emulator
+TerminalEmulator=temple4-terminal
 FileManager=thunar
 EOF
     fi
@@ -841,6 +844,348 @@ EOF
     chroot "$root" update-alternatives --set x-www-browser /usr/bin/netsurf-gtk >/dev/null 2>&1 || true
     chroot "$root" update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /usr/bin/netsurf-gtk 80 >/dev/null 2>&1 || true
     chroot "$root" update-alternatives --set gnome-www-browser /usr/bin/netsurf-gtk >/dev/null 2>&1 || true
+}
+
+install_ratty_terminal() {
+    local root="$1"
+    local ratty_archive="$CIA_DIR/ratty-x86_64-unknown-linux-gnu.tar.xz"
+
+    if [ ! -f "$ratty_archive" ]; then
+        echo "ERROR: Ratty terminal archive was not found at $ratty_archive." >&2
+        exit 1
+    fi
+
+    require_command_hint tar tar
+
+    echo "Installing Ratty terminal as the Temple4 default terminal..."
+
+    mkdir -p \
+        "$root/opt/ratty" \
+        "$root/usr/local/bin" \
+        "$root/usr/share/applications" \
+        "$root/usr/share/xfce4/helpers"
+
+    rm -rf "$root/opt/ratty"/*
+    tar -xJf "$ratty_archive" -C "$root/opt/ratty" --strip-components=1
+    chmod 755 "$root/opt/ratty/ratty"
+    ln -sf /opt/ratty/ratty "$root/usr/local/bin/ratty"
+
+    cat > "$root/usr/local/bin/temple4-terminal" <<'EOF'
+#!/bin/sh
+set -u
+
+hold=0
+if [ "${1:-}" = "--hold" ]; then
+    hold=1
+    shift
+fi
+
+case "${1:-}" in
+    -e|--execute|--command|-x)
+        shift
+        if [ "$#" -eq 0 ]; then
+            printf '%s\n' 'temple4-terminal: missing command after -e.' >&2
+            exit 2
+        fi
+        if command -v xfce4-terminal >/dev/null 2>&1; then
+            if [ "$hold" -eq 1 ]; then
+                exec xfce4-terminal --hold -x "$@"
+            fi
+            exec xfce4-terminal -x "$@"
+        fi
+        exec "$@"
+        ;;
+esac
+
+if command -v ratty >/dev/null 2>&1; then
+    started_at="$(date +%s 2>/dev/null || printf 0)"
+    ratty "$@"
+    status="$?"
+    finished_at="$(date +%s 2>/dev/null || printf 0)"
+    elapsed=$((finished_at - started_at))
+
+    if [ "$status" -eq 0 ]; then
+        if [ "$elapsed" -le 2 ]; then
+            message="Ratty exited immediately with status 0. This usually means the terminal process started but could not keep a usable graphical session. In a virtual machine, enable 3D acceleration/Vulkan if available, try a different display mode, or run xfce4-terminal manually."
+            if command -v zenity >/dev/null 2>&1; then
+                zenity --warning --title='Ratty Terminal exited' --text="$message" 2>/dev/null || true
+            fi
+            printf '%s\n' "$message" >&2
+        fi
+        exit 0
+    fi
+
+    message="Ratty failed with status $status. Temple4 kept XFCE installed for command launchers, but the default interactive terminal is Ratty. Check the live graphics stack, Vulkan/Mesa support, or run xfce4-terminal manually."
+    if command -v zenity >/dev/null 2>&1; then
+        zenity --error --title='Ratty Terminal failed' --text="$message" 2>/dev/null || true
+    fi
+    printf '%s\n' "$message" >&2
+    exit "$status"
+fi
+
+printf '%s\n' 'No graphical terminal emulator is installed.' >&2
+exit 1
+EOF
+    chmod +x "$root/usr/local/bin/temple4-terminal"
+
+    cat > "$root/usr/share/applications/ratty.desktop" <<'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Ratty Terminal
+Comment=TempleOS-inspired GPU terminal
+Exec=temple4-terminal
+Icon=utilities-terminal
+StartupNotify=true
+Terminal=false
+Categories=System;TerminalEmulator;
+Keywords=shell;prompt;command;commandline;cmd;terminal;
+EOF
+
+    cat > "$root/usr/share/xfce4/helpers/ratty.desktop" <<'EOF'
+[Desktop Entry]
+Version=1.0
+Type=X-XFCE-Helper
+Name=Ratty Terminal
+StartupNotify=true
+X-XFCE-Binaries=temple4-terminal;ratty;
+X-XFCE-Category=TerminalEmulator
+X-XFCE-Commands=temple4-terminal
+X-XFCE-CommandsWithParameter=temple4-terminal "%s"
+EOF
+
+    cat > "$root/usr/share/xfce4/helpers/temple4-terminal.desktop" <<'EOF'
+[Desktop Entry]
+Version=1.0
+Type=X-XFCE-Helper
+Name=Temple4 Terminal
+StartupNotify=true
+X-XFCE-Binaries=temple4-terminal;ratty;xfce4-terminal;
+X-XFCE-Category=TerminalEmulator
+X-XFCE-Commands=temple4-terminal
+X-XFCE-CommandsWithParameter=temple4-terminal -e "%s"
+EOF
+
+    ln -sf /usr/local/bin/temple4-terminal "$root/usr/local/bin/x-terminal-emulator"
+    chroot "$root" update-alternatives --install /usr/bin/x-terminal-emulator x-terminal-emulator /usr/local/bin/temple4-terminal 90 >/dev/null 2>&1 || true
+    chroot "$root" update-alternatives --set x-terminal-emulator /usr/local/bin/temple4-terminal >/dev/null 2>&1 || true
+}
+
+install_holyc_tools() {
+    local root="$1"
+    local holyc_src="$SCRIPT_DIR/third_party/HolyC-for-Linux"
+
+    if [ ! -d "$holyc_src" ]; then
+        echo "ERROR: HolyC-for-Linux source was not found at $holyc_src." >&2
+        exit 1
+    fi
+
+    echo "Installing HolyC-for-Linux tooling..."
+
+    mkdir -p \
+        "$root/opt/holyc-for-linux" \
+        "$root/usr/local/bin" \
+        "$root/usr/share/applications" \
+        "$root/usr/share/doc/temple4/examples"
+
+    rm -rf "$root/opt/holyc-for-linux"/*
+    cp -a "$holyc_src"/. "$root/opt/holyc-for-linux"/
+
+    cat > "$root/usr/local/bin/holyc" <<'EOF'
+#!/bin/sh
+set -eu
+
+toolroot="/opt/holyc-for-linux"
+
+usage() {
+    cat <<'USAGE'
+Usage:
+  holyc <file.hc>
+  holyc translate <file.hc>
+  holyc dump-ast <file.c>
+  holyc --help
+
+Examples:
+  cp /usr/share/temple4/examples/hello.hc .
+  holyc hello.hc
+USAGE
+}
+
+if [ "$#" -eq 0 ] || [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
+    usage
+    exit 0
+fi
+
+if [ "${1:-}" != "translate" ] && [ "${1:-}" != "dump-ast" ]; then
+    case "${1:-}" in
+        *.hc) set -- translate "$1" ;;
+        *) usage >&2; exit 2 ;;
+    esac
+fi
+
+command="$1"
+target="${2:-}"
+
+if [ -z "$target" ]; then
+    usage >&2
+    exit 2
+fi
+
+case "$target" in
+    /*) target_path="$target" ;;
+    *) target_path="$PWD/$target" ;;
+esac
+
+cd "$toolroot"
+PYTHONPATH="$toolroot${PYTHONPATH:+:$PYTHONPATH}" exec python3 -c 'from secularize import main; main()' "$command" "$target_path"
+EOF
+    chmod +x "$root/usr/local/bin/holyc"
+
+    cat > "$root/usr/local/bin/holyc-demo" <<'EOF'
+#!/bin/sh
+set -eu
+
+demo_dir="${HOME:-/tmp}/HolyC"
+mkdir -p "$demo_dir"
+cp /usr/share/temple4/examples/hello.hc "$demo_dir/hello.hc"
+cd "$demo_dir"
+
+holyc hello.hc
+
+printf '%s\n' "Wrote $demo_dir/hello.c"
+printf '%s\n' ''
+sed -n '1,120p' "$demo_dir/hello.c"
+printf '%s\n' ''
+printf '%s\n' 'Type exit or close this window when you are done.'
+exec "${SHELL:-/bin/sh}"
+EOF
+    chmod +x "$root/usr/local/bin/holyc-demo"
+
+    mkdir -p "$root/usr/share/temple4/examples"
+    cat > "$root/usr/share/temple4/examples/hello.hc" <<'EOF'
+Print("Hello from HolyC on Temple4\n");
+I64 answer = 42;
+Print("Answer: %d\n", answer);
+EOF
+
+    cat > "$root/usr/share/applications/temple4-holyc-demo.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=HolyC Demo
+Comment=Translate a small HolyC example
+Exec=temple4-terminal -e holyc-demo
+Terminal=false
+Categories=Development;
+StartupNotify=false
+EOF
+
+    mkdir -p "$root/etc/skel/Desktop"
+    cp "$root/usr/share/applications/temple4-holyc-demo.desktop" "$root/etc/skel/Desktop/HolyC Demo.desktop"
+    chmod +x "$root/etc/skel/Desktop/HolyC Demo.desktop"
+
+    if [ -d "$root/home/user" ]; then
+        mkdir -p "$root/home/user/Desktop"
+        cp "$root/usr/share/applications/temple4-holyc-demo.desktop" "$root/home/user/Desktop/HolyC Demo.desktop"
+        chmod +x "$root/home/user/Desktop/HolyC Demo.desktop"
+        chown 1000:1000 "$root/home/user/Desktop/HolyC Demo.desktop" 2>/dev/null || true
+    fi
+}
+
+install_templeos_theme_assets() {
+    local root="$1"
+    local theme_src="$SCRIPT_DIR/third_party/TempleOS-Theme"
+
+    if [ ! -d "$theme_src" ]; then
+        echo "ERROR: TempleOS-Theme assets were not found at $theme_src." >&2
+        exit 1
+    fi
+
+    echo "Installing TempleOS icon, cursor, and font assets..."
+
+    mkdir -p \
+        "$root/usr/share/icons" \
+        "$root/usr/share/fonts/truetype/templeos" \
+        "$root/usr/share/temple4/third-party/TempleOS-Theme"
+
+    rm -rf "$root/usr/share/icons/TempleOS" "$root/usr/share/icons/TempleOS_Cursor"
+    cp -a "$theme_src/icons/TempleOS" "$root/usr/share/icons/TempleOS"
+    cp -a "$theme_src/icons/TempleOS_Cursor" "$root/usr/share/icons/TempleOS_Cursor"
+    cp "$theme_src/templeos_font.ttf" "$root/usr/share/fonts/truetype/templeos/templeos_font.ttf"
+    cp "$theme_src/LICENSE" "$theme_src/README.md" "$root/usr/share/temple4/third-party/TempleOS-Theme/"
+
+    mkdir -p "$root/etc/xdg/xfce4/xfconf/xfce-perchannel-xml"
+    if [ -f "$root/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" ]; then
+        sed -i \
+            -e 's/value="Sans 10"/value="TempleOS 10"/' \
+            -e 's/value="Monospace 10"/value="TempleOS 10"/' \
+            -e 's/value="Tango"/value="TempleOS"/' \
+            "$root/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml"
+        sed -i \
+            -e '/CursorThemeName/s/value="[^"]*"/value="TempleOS_Cursor"/' \
+            -e '/CursorThemeSize/s/value="[^"]*"/value="24"/' \
+            "$root/etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml"
+    fi
+
+    local profile
+    for profile in "$root/etc/skel" "$root/home/user"; do
+        [ -d "$profile" ] || continue
+
+        mkdir -p \
+            "$profile/.config/xfce4/xfconf/xfce-perchannel-xml" \
+            "$profile/.config/gtk-3.0" \
+            "$profile/.config/xfce4/terminal"
+
+        cat > "$profile/.config/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+
+<channel name="xsettings" version="1.0">
+  <property name="Net" type="empty">
+    <property name="ThemeName" type="string" value="Adwaita"/>
+    <property name="IconThemeName" type="string" value="TempleOS"/>
+  </property>
+  <property name="Gtk" type="empty">
+    <property name="FontName" type="string" value="TempleOS 10"/>
+    <property name="MonospaceFontName" type="string" value="TempleOS 10"/>
+    <property name="CursorThemeName" type="string" value="TempleOS_Cursor"/>
+    <property name="CursorThemeSize" type="int" value="24"/>
+  </property>
+</channel>
+EOF
+
+        cat > "$profile/.config/gtk-3.0/settings.ini" <<'EOF'
+[Settings]
+gtk-theme-name=Adwaita
+gtk-icon-theme-name=TempleOS
+gtk-cursor-theme-name=TempleOS_Cursor
+gtk-cursor-theme-size=24
+gtk-font-name=TempleOS 10
+gtk-monospace-font-name=TempleOS 10
+EOF
+
+        cat > "$profile/.gtkrc-2.0" <<'EOF'
+gtk-theme-name="Adwaita"
+gtk-icon-theme-name="TempleOS"
+gtk-cursor-theme-name="TempleOS_Cursor"
+gtk-cursor-theme-size=24
+gtk-font-name="TempleOS 10"
+EOF
+
+        cat > "$profile/.config/xfce4/terminal/terminalrc" <<'EOF'
+[Configuration]
+FontName=TempleOS 10
+MiscAlwaysShowTabs=FALSE
+MiscBell=FALSE
+MiscBordersDefault=TRUE
+MiscCursorBlinks=FALSE
+MiscCursorShape=TERMINAL_CURSOR_SHAPE_BLOCK
+MiscDefaultGeometry=80x24
+MiscMenubarDefault=TRUE
+MiscToolbarDefault=FALSE
+MiscConfirmClose=TRUE
+EOF
+    done
+
+    chown -R 1000:1000 "$root/home/user/.config" "$root/home/user/.gtkrc-2.0" 2>/dev/null || true
 }
 
 write_fetch_branding() {
@@ -909,7 +1254,7 @@ install_runtime_packages() {
     trap 'unmount_chroot_runtime; trap - RETURN' RETURN
 
     chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get update
-    chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends qemu-system-x86 qemu-system-gui qemu-utils libsdl2-2.0-0 netsurf-gtk
+    chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends qemu-system-x86 qemu-system-gui qemu-utils libsdl2-2.0-0 netsurf-gtk fontconfig libfontconfig1 libwayland-client0 libxkbcommon0 libegl1 libgl1 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libx11-6 libx11-xcb1 libxcb1 libxcb-randr0 libxcb-xfixes0 libxkbcommon-x11-0 libxcursor1 libxi6 libxrandr2 python3 python3-docopt python3-pycparser
     chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends fastfetch ||
         echo "WARNING: fastfetch package was not available from the configured apt sources." >&2
 
@@ -921,6 +1266,10 @@ install_runtime_packages() {
 
     chroot "$root" locale-gen en_US.UTF-8
     configure_default_browser "$root"
+    if command -v chroot >/dev/null 2>&1; then
+        chroot "$root" fc-cache -f /usr/share/fonts >/dev/null 2>&1 || true
+        chroot "$root" gtk-update-icon-cache -f -t /usr/share/icons/TempleOS >/dev/null 2>&1 || true
+    fi
     chroot "$root" apt-get clean
     rm -rf "$root/var/cache/apt/archives"/* "$root/var/lib/apt/lists"/*
 
@@ -941,6 +1290,9 @@ repack_livefs() {
     configure_system_identity "$LIVE_ROOT"
     sed -i 's|^user:x:1000:1000:.*:/home/user:/bin/bash$|user:x:1000:1000:Temple4 User,,,:/home/user:/bin/bash|' "$LIVE_ROOT/etc/passwd"
 
+    install_ratty_terminal "$LIVE_ROOT"
+    install_holyc_tools "$LIVE_ROOT"
+    install_templeos_theme_assets "$LIVE_ROOT"
     write_livefs_launchers "$LIVE_ROOT"
     write_default_wallpaper "$LIVE_ROOT"
     write_fetch_branding "$LIVE_ROOT"

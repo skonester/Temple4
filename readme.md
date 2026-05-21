@@ -57,7 +57,10 @@ keep going without needing to assemble the whole setup by hand.
 - BIOS and UEFI boot support through ISOLINUX and GRUB
 - TempleOS and ZealOS launchers using QEMU
 - Native Exodus launcher
+- HolyC-to-C translation demo through `holyc`
 - Calamares installer integration
+- Ratty Terminal as the default TempleOS-inspired terminal
+- TempleOS icon, cursor, and font assets adapted for XFCE
 - NetSurf GTK as the default lightweight browser
 - Fastfetch Temple4 branding
 - Runtime-lite release profile that removes large nonessential desktop Debian payloads
@@ -100,7 +103,10 @@ before writing it to removable media.
 - Locale: `en_US.UTF-8`
 - Keyboard layout: `us`
 - Browser: `netsurf-gtk`
-- Terminal: `xfce4-terminal`
+- Terminal: `ratty`
+- Icon theme: `TempleOS`
+- Cursor theme: `TempleOS_Cursor`
+- UI font: `TempleOS 10`
 - Wallpaper: `/usr/share/backgrounds/temple4/Temple4.png`
 
 Temple4 identifies itself in boot menus, `/etc/os-release`, hostname data, and
@@ -137,6 +143,8 @@ Temple4 includes desktop and application-menu launchers for:
 - TempleOS in QEMU
 - ZealOS in QEMU
 - Exodus as a native Linux application
+- HolyC-for-Linux as a local `holyc` command and demo
+- Ratty Terminal as the default Linux terminal
 
 Command-line launchers are available too:
 
@@ -144,6 +152,9 @@ Command-line launchers are available too:
 temple4-run-templeos
 temple4-run-zealos
 temple4-run-exodus
+holyc
+holyc-demo
+ratty
 ```
 
 Bundled payloads are copied into the live user's home:
