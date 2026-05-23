@@ -204,6 +204,7 @@ write_livefs_launchers() {
 
     if [ -d "$CIA_DIR" ]; then
         cp -a "$CIA_DIR"/. "$root/etc/skel/Terry"/
+        rm -f "$root/etc/skel/Terry"/*.deb "$root/etc/skel/Terry"/*.rpm 2>/dev/null || true
     fi
 
     cat > "$root/usr/local/bin/temple4-run-templeos" <<'EOF'
@@ -267,6 +268,22 @@ EOF
 
     chmod +x "$root/usr/local/bin/temple4-run-exodus"
 
+    # Create temple4-terminal wrapper script
+    cat > "$root/usr/local/bin/temple4-terminal" <<'EOF'
+#!/bin/sh
+set -u
+
+# Wrapper script for the default terminal emulator (Cool Retro Term)
+if command -v cool-retro-term >/dev/null 2>&1; then
+    exec cool-retro-term "$@"
+elif command -v xfce4-terminal >/dev/null 2>&1; then
+    exec xfce4-terminal "$@"
+else
+    exec x-terminal-emulator "$@"
+fi
+EOF
+    chmod +x "$root/usr/local/bin/temple4-terminal"
+
     cat > "$root/usr/share/applications/temple4-templeos.desktop" <<'EOF'
 [Desktop Entry]
 Type=Application
@@ -319,6 +336,7 @@ EOF
         chmod +x "$root/home/user/Desktop/TempleOS.desktop" "$root/home/user/Desktop/ZealOS.desktop" "$root/home/user/Desktop/Exodus.desktop"
         if [ -d "$CIA_DIR" ]; then
             cp -a "$CIA_DIR"/. "$root/home/user/Terry"/
+            rm -f "$root/home/user/Terry"/*.deb "$root/home/user/Terry"/*.rpm 2>/dev/null || true
         fi
         chown -R 1000:1000 "$root/home/user/Desktop" "$root/home/user/Terry" 2>/dev/null || true
     fi
@@ -499,6 +517,12 @@ configure_calamares() {
         sed -i '/^[[:space:]]*-[[:space:]]*sources-media-unmount[[:space:]]*$/d' "$settings"
     fi
 
+    local packages_conf="$root/etc/calamares/modules/packages.conf"
+    if [ -f "$packages_conf" ]; then
+        # Use dummy package backend to prevent failing with Error 100 on offline installs.
+        sed -i 's/^backend:.*/backend: dummy/' "$packages_conf"
+    fi
+
     if [ -f "$root/etc/calamares/modules/finished.conf" ]; then
         sed -i \
             -e 's/^restartNowChecked:.*/restartNowChecked: false/' \
@@ -634,7 +658,6 @@ strip_lite_profile() {
         cups-ipp-utils
         cups-ppdc
         cups-server-common
-        firefox-esr
         fonts-ipafont-mincho
         fonts-vlgothic
         fonts-wqy-microhei
@@ -663,6 +686,12 @@ strip_lite_profile() {
         vlc-plugin-base
         vlc-plugin-qt
         vlc-plugin-video-output
+        synaptic
+        falkon
+        netsurf-gtk
+        netsurf
+        xpdf
+        l3afpad
     )
 
     echo "Applying lite strip profile..."
@@ -723,10 +752,7 @@ strip_lite_profile() {
         fi
     done
 
-    rm -f \
-        "$root/etc/apparmor.d/firefox" \
-        "$root/usr/share/xfce4/helpers/firefox.desktop"
-    find "$root/var/cache/apparmor" -mindepth 1 -maxdepth 1 -type f -iname '*firefox*' -delete 2>/dev/null || true
+    # Firefox configuration files preserved
 
     rm -rf \
         "$root/usr/share/wallpapers" \
@@ -796,18 +822,31 @@ configure_default_browser() {
     mkdir -p "$root/etc/xdg/xfce4" "$root/etc/skel/.config" "$root/home/user/.config"
 
     if [ -f "$root/etc/xdg/xfce4/helpers.rc" ]; then
-        sed -i 's/^WebBrowser=.*/WebBrowser=netsurf-gtk/' "$root/etc/xdg/xfce4/helpers.rc"
+        sed -i 's/^WebBrowser=.*/WebBrowser=firefox-esr/' "$root/etc/xdg/xfce4/helpers.rc"
         sed -i 's/^TerminalEmulator=.*/TerminalEmulator=temple4-terminal/' "$root/etc/xdg/xfce4/helpers.rc"
-        grep -q '^WebBrowser=' "$root/etc/xdg/xfce4/helpers.rc" || printf '%s\n' 'WebBrowser=netsurf-gtk' >> "$root/etc/xdg/xfce4/helpers.rc"
+        grep -q '^WebBrowser=' "$root/etc/xdg/xfce4/helpers.rc" || printf '%s\n' 'WebBrowser=firefox-esr' >> "$root/etc/xdg/xfce4/helpers.rc"
         grep -q '^TerminalEmulator=' "$root/etc/xdg/xfce4/helpers.rc" || printf '%s\n' 'TerminalEmulator=temple4-terminal' >> "$root/etc/xdg/xfce4/helpers.rc"
     else
         cat > "$root/etc/xdg/xfce4/helpers.rc" <<'EOF'
-WebBrowser=netsurf-gtk
+WebBrowser=firefox-esr
 MailReader=thunderbird
 TerminalEmulator=temple4-terminal
 FileManager=thunar
 EOF
     fi
+
+    # Create the custom XFCE helper for temple4-terminal
+    mkdir -p "$root/usr/share/xfce4/helpers"
+    cat > "$root/usr/share/xfce4/helpers/temple4-terminal.desktop" <<'EOF'
+[Desktop Entry]
+Version=1.0
+Icon=cool-retro-term
+Type=X-XFCE-Helper
+Name=Temple4 Terminal
+X-XFCE-Binaries=temple4-terminal;cool-retro-term;xfce4-terminal;
+X-XFCE-Commands=temple4-terminal
+X-XFCE-CommandsWithParameter=temple4-terminal -e "%s"
+EOF
 
     cat > "$root/usr/share/applications/xfce4-web-browser.desktop" <<'EOF'
 [Desktop Entry]
@@ -815,8 +854,8 @@ Version=1.0
 Type=Application
 Name=Web Browser
 Comment=Browse the web
-Exec=netsurf-gtk %u
-Icon=netsurf
+Exec=firefox-esr %u
+Icon=firefox-esr
 StartupNotify=true
 Terminal=false
 Categories=Network;WebBrowser;X-XFCE;X-Xfce-Toplevel;
@@ -828,148 +867,24 @@ EOF
 
     cat > "$root/etc/xdg/mimeapps.list" <<'EOF'
 [Default Applications]
-x-scheme-handler/http=netsurf-gtk.desktop
-x-scheme-handler/https=netsurf-gtk.desktop
-text/html=netsurf-gtk.desktop
-application/xhtml+xml=netsurf-gtk.desktop
-application/xml=netsurf-gtk.desktop
-text/xml=netsurf-gtk.desktop
+x-scheme-handler/http=firefox-esr.desktop
+x-scheme-handler/https=firefox-esr.desktop
+text/html=firefox-esr.desktop
+application/xhtml+xml=firefox-esr.desktop
+application/xml=firefox-esr.desktop
+text/xml=firefox-esr.desktop
 EOF
 
     cp "$root/etc/xdg/mimeapps.list" "$root/etc/skel/.config/mimeapps.list"
     cp "$root/etc/xdg/mimeapps.list" "$root/home/user/.config/mimeapps.list"
     chown 1000:1000 "$root/home/user/.config/mimeapps.list" 2>/dev/null || true
 
-    chroot "$root" update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/netsurf-gtk 80 >/dev/null 2>&1 || true
-    chroot "$root" update-alternatives --set x-www-browser /usr/bin/netsurf-gtk >/dev/null 2>&1 || true
-    chroot "$root" update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /usr/bin/netsurf-gtk 80 >/dev/null 2>&1 || true
-    chroot "$root" update-alternatives --set gnome-www-browser /usr/bin/netsurf-gtk >/dev/null 2>&1 || true
+    chroot "$root" update-alternatives --install /usr/bin/x-www-browser x-www-browser /usr/bin/firefox-esr 80 >/dev/null 2>&1 || true
+    chroot "$root" update-alternatives --set x-www-browser /usr/bin/firefox-esr >/dev/null 2>&1 || true
+    chroot "$root" update-alternatives --install /usr/bin/gnome-www-browser gnome-www-browser /usr/bin/firefox-esr 80 >/dev/null 2>&1 || true
+    chroot "$root" update-alternatives --set gnome-www-browser /usr/bin/firefox-esr >/dev/null 2>&1 || true
 }
 
-install_ratty_terminal() {
-    local root="$1"
-    local ratty_archive="$CIA_DIR/ratty-x86_64-unknown-linux-gnu.tar.xz"
-
-    if [ ! -f "$ratty_archive" ]; then
-        echo "ERROR: Ratty terminal archive was not found at $ratty_archive." >&2
-        exit 1
-    fi
-
-    require_command_hint tar tar
-
-    echo "Installing Ratty terminal as the Temple4 default terminal..."
-
-    mkdir -p \
-        "$root/opt/ratty" \
-        "$root/usr/local/bin" \
-        "$root/usr/share/applications" \
-        "$root/usr/share/xfce4/helpers"
-
-    rm -rf "$root/opt/ratty"/*
-    tar -xJf "$ratty_archive" -C "$root/opt/ratty" --strip-components=1
-    chmod 755 "$root/opt/ratty/ratty"
-    ln -sf /opt/ratty/ratty "$root/usr/local/bin/ratty"
-
-    cat > "$root/usr/local/bin/temple4-terminal" <<'EOF'
-#!/bin/sh
-set -u
-
-hold=0
-if [ "${1:-}" = "--hold" ]; then
-    hold=1
-    shift
-fi
-
-case "${1:-}" in
-    -e|--execute|--command|-x)
-        shift
-        if [ "$#" -eq 0 ]; then
-            printf '%s\n' 'temple4-terminal: missing command after -e.' >&2
-            exit 2
-        fi
-        if command -v xfce4-terminal >/dev/null 2>&1; then
-            if [ "$hold" -eq 1 ]; then
-                exec xfce4-terminal --hold -x "$@"
-            fi
-            exec xfce4-terminal -x "$@"
-        fi
-        exec "$@"
-        ;;
-esac
-
-if command -v ratty >/dev/null 2>&1; then
-    started_at="$(date +%s 2>/dev/null || printf 0)"
-    ratty "$@"
-    status="$?"
-    finished_at="$(date +%s 2>/dev/null || printf 0)"
-    elapsed=$((finished_at - started_at))
-
-    if [ "$status" -eq 0 ]; then
-        if [ "$elapsed" -le 2 ]; then
-            message="Ratty exited immediately with status 0. This usually means the terminal process started but could not keep a usable graphical session. In a virtual machine, enable 3D acceleration/Vulkan if available, try a different display mode, or run xfce4-terminal manually."
-            if command -v zenity >/dev/null 2>&1; then
-                zenity --warning --title='Ratty Terminal exited' --text="$message" 2>/dev/null || true
-            fi
-            printf '%s\n' "$message" >&2
-        fi
-        exit 0
-    fi
-
-    message="Ratty failed with status $status. Temple4 kept XFCE installed for command launchers, but the default interactive terminal is Ratty. Check the live graphics stack, Vulkan/Mesa support, or run xfce4-terminal manually."
-    if command -v zenity >/dev/null 2>&1; then
-        zenity --error --title='Ratty Terminal failed' --text="$message" 2>/dev/null || true
-    fi
-    printf '%s\n' "$message" >&2
-    exit "$status"
-fi
-
-printf '%s\n' 'No graphical terminal emulator is installed.' >&2
-exit 1
-EOF
-    chmod +x "$root/usr/local/bin/temple4-terminal"
-
-    cat > "$root/usr/share/applications/ratty.desktop" <<'EOF'
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Ratty Terminal
-Comment=TempleOS-inspired GPU terminal
-Exec=temple4-terminal
-Icon=utilities-terminal
-StartupNotify=true
-Terminal=false
-Categories=System;TerminalEmulator;
-Keywords=shell;prompt;command;commandline;cmd;terminal;
-EOF
-
-    cat > "$root/usr/share/xfce4/helpers/ratty.desktop" <<'EOF'
-[Desktop Entry]
-Version=1.0
-Type=X-XFCE-Helper
-Name=Ratty Terminal
-StartupNotify=true
-X-XFCE-Binaries=temple4-terminal;ratty;
-X-XFCE-Category=TerminalEmulator
-X-XFCE-Commands=temple4-terminal
-X-XFCE-CommandsWithParameter=temple4-terminal "%s"
-EOF
-
-    cat > "$root/usr/share/xfce4/helpers/temple4-terminal.desktop" <<'EOF'
-[Desktop Entry]
-Version=1.0
-Type=X-XFCE-Helper
-Name=Temple4 Terminal
-StartupNotify=true
-X-XFCE-Binaries=temple4-terminal;ratty;xfce4-terminal;
-X-XFCE-Category=TerminalEmulator
-X-XFCE-Commands=temple4-terminal
-X-XFCE-CommandsWithParameter=temple4-terminal -e "%s"
-EOF
-
-    ln -sf /usr/local/bin/temple4-terminal "$root/usr/local/bin/x-terminal-emulator"
-    chroot "$root" update-alternatives --install /usr/bin/x-terminal-emulator x-terminal-emulator /usr/local/bin/temple4-terminal 90 >/dev/null 2>&1 || true
-    chroot "$root" update-alternatives --set x-terminal-emulator /usr/local/bin/temple4-terminal >/dev/null 2>&1 || true
-}
 
 install_holyc_tools() {
     local root="$1"
@@ -1047,25 +962,98 @@ set -eu
 
 demo_dir="${HOME:-/tmp}/HolyC"
 mkdir -p "$demo_dir"
-cp /usr/share/temple4/examples/hello.hc "$demo_dir/hello.hc"
+cp /usr/share/temple4/examples/*.hc "$demo_dir/" 2>/dev/null || true
 cd "$demo_dir"
 
-holyc hello.hc
+clear
+cat <<'HEADER'
+================================================================================
+                     TEMPLE4 HOLYC COMPILER & SHELL DEMO
+================================================================================
+HEADER
 
-printf '%s\n' "Wrote $demo_dir/hello.c"
+holyc 01_hello.hc >/dev/null 2>&1 || true
+
+printf '%s\n' "Translating 01_hello.hc -> 01_hello.c..."
 printf '%s\n' ''
-sed -n '1,120p' "$demo_dir/hello.c"
+sed -n '1,20p' "01_hello.c" 2>/dev/null || true
 printf '%s\n' ''
-printf '%s\n' 'Type exit or close this window when you are done.'
+
+cat <<'HELP'
+--------------------------------------------------------------------------------
+                     10 COMMON TEMPLEOS / HOLYC COMMANDS
+--------------------------------------------------------------------------------
+1.  Dir;                   - List files in current directory.
+2.  Cd("dirname");          - Change directory.
+3.  Ed("filename");          - Open the document editor on a file.
+4.  Type("filename");        - Print the contents of a file to the command line.
+5.  DocClear;                - Clear the command line buffer / screen.
+6.  Play("E B C D C B A");   - Play musical notes on the PC speaker.
+7.  Man("symbol");           - Show help / manual for a function or class.
+8.  U("funcname");           - Unassemble a compiled HolyC function into asm.
+9.  ClassRep(instance);      - Print a structural representation of a class.
+10. Find("pattern");         - Search for a text pattern in files under current dir.
+
+You are now in a Linux shell at ~/HolyC/ with the following examples:
+HELP
+
+ls -1 *.hc
+
+cat <<'HELP'
+--------------------------------------------------------------------------------
+To translate any HolyC file to C:    holyc <file.hc>
+To view translated C code:          cat <file.c>
+To exit this demo terminal:         exit
+--------------------------------------------------------------------------------
+HELP
+
 exec "${SHELL:-/bin/sh}"
 EOF
     chmod +x "$root/usr/local/bin/holyc-demo"
 
     mkdir -p "$root/usr/share/temple4/examples"
-    cat > "$root/usr/share/temple4/examples/hello.hc" <<'EOF'
-Print("Hello from HolyC on Temple4\n");
+    cat > "$root/usr/share/temple4/examples/01_hello.hc" <<'EOF'
+Print("Hello from HolyC on Temple4!\n");
 I64 answer = 42;
-Print("Answer: %d\n", answer);
+Print("The answer to life, the universe, and everything is: %d\n", answer);
+EOF
+
+    cat > "$root/usr/share/temple4/examples/02_types.hc" <<'EOF'
+// Primitive data types in HolyC
+I64 integer_val = -100;
+U64 unsigned_val = 500;
+F64 float_val = 3.14159;
+U8 character_val = 'T';
+Print("I64: %d, U64: %u, F64: %f, U8: %c\n", integer_val, unsigned_val, float_val, character_val);
+EOF
+
+    cat > "$root/usr/share/temple4/examples/03_functions.hc" <<'EOF'
+// HolyC function with void return type (U0)
+U0 GreetUser(I64 count) {
+  Print("Greeting number %d\n", count);
+}
+
+GreetUser(1);
+GreetUser(2);
+GreetUser(3);
+EOF
+
+    cat > "$root/usr/share/temple4/examples/04_loops.hc" <<'EOF'
+// Basic loops in HolyC
+I64 i;
+for (i = 0; i < 5; i++) {
+  Print("Iteration: %d\n", i);
+}
+EOF
+
+    cat > "$root/usr/share/temple4/examples/05_pointers.hc" <<'EOF'
+// Pointers and dereferencing in HolyC
+I64 original = 777;
+I64 *ptr = &original;
+Print("Original value: %d\n", original);
+Print("Value via pointer: %d\n", *ptr);
+*ptr = 999;
+Print("Modified value: %d\n", original);
 EOF
 
     cat > "$root/usr/share/applications/temple4-holyc-demo.desktop" <<'EOF'
@@ -1253,8 +1241,27 @@ install_runtime_packages() {
     mount_chroot_runtime "$root"
     trap 'unmount_chroot_runtime; trap - RETURN' RETURN
 
+    sed -i 's/ main$/ main contrib non-free non-free-firmware/g' "$root/etc/apt/sources.list" 2>/dev/null || true
+    sed -i 's/Components: main$/Components: main contrib non-free non-free-firmware/g' "$root/etc/apt/sources.list.d/debian.sources" 2>/dev/null || true
+
+    cat > "$root/etc/apt/sources.list.d/ubuntu-failsafe.list" <<'EOF'
+# Ubuntu default repositories as a failsafe
+deb [trusted=yes] http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
+EOF
+
     chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get update
-    chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends qemu-system-x86 qemu-system-gui qemu-utils libsdl2-2.0-0 netsurf-gtk fontconfig libfontconfig1 libwayland-client0 libxkbcommon0 libegl1 libgl1 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libx11-6 libx11-xcb1 libxcb1 libxcb-randr0 libxcb-xfixes0 libxkbcommon-x11-0 libxcursor1 libxi6 libxrandr2 python3 python3-docopt python3-pycparser
+    chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends qemu-system-x86 qemu-system-gui qemu-utils libsdl2-2.0-0 firefox-esr fontconfig libfontconfig1 libwayland-client0 libxkbcommon0 libegl1 libgl1 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libx11-6 libx11-xcb1 libxcb1 libxcb-randr0 libxcb-xfixes0 libxkbcommon-x11-0 libxcursor1 libxi6 libxrandr2 python3 python3-docopt python3-pycparser network-manager cool-retro-term gdebi calamares lightdm xserver-xorg-video-nouveau mesa-utils vulkan-tools pciutils firmware-misc-nonfree dosfstools mtools ntfs-3g exfatprogs btrfs-progs xfsprogs parted udisks2 cryptsetup libegl-mesa0 libgbm1 lvm2 thin-provisioning-tools
+
+    # Purge falkon, netsurf-gtk, netsurf, synaptic, xpdf, and l3afpad packages
+    chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y purge falkon netsurf-gtk netsurf synaptic xpdf l3afpad || true
+
+    # Remove thunar bulk rename launcher
+    rm -f "$root/usr/share/applications/thunar-bulk-rename.desktop"
+
+    # Set temple4-terminal as the default x-terminal-emulator
+    chroot "$root" update-alternatives --install /usr/bin/x-terminal-emulator x-terminal-emulator /usr/local/bin/temple4-terminal 90 >/dev/null 2>&1 || true
+    chroot "$root" update-alternatives --set x-terminal-emulator /usr/local/bin/temple4-terminal >/dev/null 2>&1 || true
+
     chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends fastfetch ||
         echo "WARNING: fastfetch package was not available from the configured apt sources." >&2
 
@@ -1262,6 +1269,7 @@ install_runtime_packages() {
         cp "$CIA_DIR/exodus-appliance_1.0-2_amd64.deb" "$exodus_deb"
         chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y install /tmp/exodus-appliance_1.0-2_amd64.deb
         rm -f "$exodus_deb"
+        rm -f "$root/etc/xdg/autostart/exodus.desktop" "$root/home/user/.config/autostart/exodus.desktop" 2>/dev/null || true
     fi
 
     chroot "$root" locale-gen en_US.UTF-8
@@ -1290,7 +1298,6 @@ repack_livefs() {
     configure_system_identity "$LIVE_ROOT"
     sed -i 's|^user:x:1000:1000:.*:/home/user:/bin/bash$|user:x:1000:1000:Temple4 User,,,:/home/user:/bin/bash|' "$LIVE_ROOT/etc/passwd"
 
-    install_ratty_terminal "$LIVE_ROOT"
     install_holyc_tools "$LIVE_ROOT"
     install_templeos_theme_assets "$LIVE_ROOT"
     write_livefs_launchers "$LIVE_ROOT"
@@ -1315,6 +1322,31 @@ repack_livefs() {
             exit 1
             ;;
     esac
+
+    # Clean up installer packages from Terry folder to avoid shipping installer artifacts to installed user
+    rm -f "$LIVE_ROOT/etc/skel/Terry"/*.deb "$LIVE_ROOT/etc/skel/Terry"/*.rpm 2>/dev/null || true
+    if [ -d "$LIVE_ROOT/home/user/Terry" ]; then
+        rm -f "$LIVE_ROOT/home/user/Terry"/*.deb "$LIVE_ROOT/home/user/Terry"/*.rpm 2>/dev/null || true
+    fi
+
+    # Remove LLVMpipe Vulkan driver (lvp) ICD files so Vulkan/Zink doesn't default to software rendering,
+    # but keep the OpenGL software rasterizer (swrast) so we can boot to desktop as a fallback
+    rm -f "$LIVE_ROOT/usr/share/vulkan/icd.d/lvp_icd."*.json 2>/dev/null || true
+
+    # Remove nomodeset leftovers from grub and Calamares configs to ensure KMS can initialize on the target system
+    if [ -f "$LIVE_ROOT/etc/default/grub" ]; then
+        sed -i 's/\bnomodeset\b//g' "$LIVE_ROOT/etc/default/grub"
+        sed -i 's/  */ /g; s/ "/"/g' "$LIVE_ROOT/etc/default/grub"
+    fi
+    if [ -d "$LIVE_ROOT/etc/default/grub.d" ]; then
+        find "$LIVE_ROOT/etc/default/grub.d" -type f -exec sed -i 's/\bnomodeset\b//g' {} + 2>/dev/null || true
+    fi
+    if [ -f "$LIVE_ROOT/etc/calamares/modules/grubcfg.conf" ]; then
+        sed -i 's/\bnomodeset\b//g' "$LIVE_ROOT/etc/calamares/modules/grubcfg.conf"
+    fi
+    if [ -f "$LIVE_ROOT/etc/calamares/modules/bootloader.conf" ]; then
+        sed -i 's/\bnomodeset\b//g' "$LIVE_ROOT/etc/calamares/modules/bootloader.conf"
+    fi
 
     rm -f "$ISO_ROOT/live/filesystem.squashfs"
     mksquashfs "$LIVE_ROOT" "$ISO_ROOT/live/filesystem.squashfs" -comp xz -noappend

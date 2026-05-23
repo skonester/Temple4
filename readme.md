@@ -57,12 +57,13 @@ keep going without needing to assemble the whole setup by hand.
 - BIOS and UEFI boot support through ISOLINUX and GRUB
 - TempleOS and ZealOS launchers using QEMU
 - Native Exodus launcher
-- HolyC-to-C translation demo through `holyc`
-- Calamares installer integration
-- Ratty Terminal as the default TempleOS-inspired terminal
+- Expanded HolyC-to-C translation demo through `holyc` and `holyc-demo`
+- Calamares installer integration with USB flash drive and LVM support
+- Cool Retro Term as the default terminal
 - TempleOS icon, cursor, and font assets adapted for XFCE
-- NetSurf GTK as the default lightweight browser
+- Firefox ESR as the default browser
 - Fastfetch Temple4 branding
+- Zink/NVK hardware graphics acceleration drivers
 - Runtime-lite release profile that removes large nonessential desktop Debian payloads
 - Bare-metal wallpaper helper for XFCE monitor-name differences
 
@@ -102,8 +103,8 @@ before writing it to removable media.
 - Boot: GRUB for UEFI, ISOLINUX for BIOS
 - Locale: `en_US.UTF-8`
 - Keyboard layout: `us`
-- Browser: `netsurf-gtk`
-- Terminal: `ratty`
+- Browser: `firefox-esr`
+- Terminal: `cool-retro-term`
 - Icon theme: `TempleOS`
 - Cursor theme: `TempleOS_Cursor`
 - UI font: `TempleOS 10`
@@ -144,7 +145,7 @@ Temple4 includes desktop and application-menu launchers for:
 - ZealOS in QEMU
 - Exodus as a native Linux application
 - HolyC-for-Linux as a local `holyc` command and demo
-- Ratty Terminal as the default Linux terminal
+- Cool Retro Term as the default Linux terminal
 
 Command-line launchers are available too:
 
@@ -154,7 +155,7 @@ temple4-run-zealos
 temple4-run-exodus
 holyc
 holyc-demo
-ratty
+cool-retro-term
 ```
 
 Bundled payloads are copied into the live user's home:
@@ -212,6 +213,24 @@ temple4-install
 The old `calamares-install-debian` entry is kept as a compatibility wrapper for
 systems or launchers that still look for the Debian live installer command.
 
+### GPU Drivers and Graphics Acceleration
+
+Temple4 includes out-of-the-box hardware graphics acceleration for modern graphics cards, specifically utilizing the open-source Nouveau/NVK driver stack with Zink (OpenGL-on-Vulkan translation) on NVIDIA hardware:
+- **Pre-installed Stack**: The system comes pre-installed with `xserver-xorg-video-nouveau`, `mesa-vulkan-drivers`, and `firmware-misc-nonfree` (non-free firmware blobs required for NVIDIA hardware initialization).
+- **Out-of-the-box Hardware Acceleration**: KMS (Kernel Mode Setting) is fully enabled, and all `nomodeset` kernel parameter leftovers are automatically removed during the installation. This allows the system to initialize the GPU hardware immediately rather than falling back to CPU-based `llvmpipe` rendering.
+- **Proprietary NVIDIA Drivers**: Since the repositories are configured to include `non-free` and `non-free-firmware` archives, users who want to switch to proprietary drivers on the installed system need to install the kernel headers matching their kernel (for DKMS kernel module compilation) before installing the driver. Run the following commands:
+  ```bash
+  sudo apt update
+  sudo apt install -y linux-headers-amd64
+  sudo apt install -y nvidia-driver firmware-misc-nonfree
+  sudo reboot
+  ```
+
+### Installer Optimization & Cleanups
+The integrated Calamares installer has been optimized for reliability and cleanliness:
+- **Offline Install Friendly**: The package manager module is configured to use a dummy backend to prevent offline install failures (Error 100).
+- **Clean Home Directory**: The user home payload (`/home/user/Terry`) and system skeleton template (`/etc/skel/Terry`) are automatically cleaned of installer packages (such as raw `.deb` and `.rpm` files) during target generation. The installed target system only retains the necessary `.ISO` payloads required for emulating TempleOS and ZealOS.
+
 ### USB and SSD Install Notes
 
 Installing to a USB drive or SSD can complete successfully even if the system
@@ -229,7 +248,10 @@ The downloadable release uses the runtime-lite profile. It keeps the core
 desktop and Temple tools while leaving out larger nonessential packages and
 cached payloads, including:
 
-- Firefox
+- Falkon and NetSurf browsers
+- Synaptic package manager
+- XPDF reader
+- L3afpad editor
 - VLC and Audacious
 - CUPS printing services
 - Bluetooth/BlueZ
@@ -278,16 +300,16 @@ git lfs install
 git lfs pull
 ```
 
-Build the runtime-lite ISO:
+Build the runtime-lite ISO (including live filesystem repack and runtime packages):
 
 ```bash
-./full_build_wsl.sh
+INSTALL_RUNTIME=1 REPACK_LIVEFS=1 ./build_temple4_wsl.sh
 ```
 
 The output defaults to:
 
 ```text
-~/temple4_work/Temple4-runtime-lite.iso
+~/temple4_work/Temple4-quick.iso
 ```
 
 For a fast boot-menu-only rebuild that skips the live filesystem repack, run:
@@ -296,15 +318,9 @@ For a fast boot-menu-only rebuild that skips the live filesystem repack, run:
 ./build_temple4_wsl.sh
 ```
 
-To smoke-test the ISO in QEMU from WSL, run:
-
-```bash
-./test_iso_qemu.sh
-```
-
-The scripts check that they are running in WSL and print package-install hints
+The script checks that it is running in WSL and prints package-install hints
 when a required command is missing. Set `ALLOW_NON_WSL=1` only if you
-intentionally want to run the same scripts on a regular Linux host.
+intentionally want to run the same script on a regular Linux host.
 
 ## License
 
