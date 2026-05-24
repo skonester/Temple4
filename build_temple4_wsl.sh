@@ -670,7 +670,8 @@ strip_lite_profile() {
         gnumeric-common
         kasumi
         lazpaint-qt5
-        linux-image-6.12.67-gnu
+        linux-image-amd64
+        linux-image-rt-amd64
         live-clone
         man-db
         printer-driver-cups-pdf
@@ -758,10 +759,14 @@ strip_lite_profile() {
         "$root/usr/share/wallpapers" \
         "$root/usr/share/images/desktop-base"
 
-    rm -rf \
-        "$root/boot/"*6.12.67-gnu* \
-        "$root/usr/lib/modules/6.12.67-gnu" \
-        "$root/usr/lib/modules/6.12.48+deb13-amd64"
+    # Dynamically remove standard kernel modules and boot files that do not contain -gnu in their name
+    if [ -d "$root/usr/lib/modules" ]; then
+        find "$root/usr/lib/modules" -mindepth 1 -maxdepth 1 -type d ! -name '*-gnu' -exec rm -rf {} +
+    fi
+    if [ -d "$root/lib/modules" ]; then
+        find "$root/lib/modules" -mindepth 1 -maxdepth 1 -type d ! -name '*-gnu' -exec rm -rf {} +
+    fi
+    find "$root/boot" -maxdepth 1 -type f \( -name 'vmlinuz-*' -o -name 'initrd.img-*' -o -name 'System.map-*' -o -name 'config-*' \) ! -name '*-gnu*' -delete
     rm -f "$root/vmlinuz.old" "$root/initrd.img.old"
 
     if [ -d "$root/usr/share/backgrounds" ]; then
@@ -1241,16 +1246,44 @@ install_runtime_packages() {
     mount_chroot_runtime "$root"
     trap 'unmount_chroot_runtime; trap - RETURN' RETURN
 
-    sed -i 's/ main$/ main contrib non-free non-free-firmware/g' "$root/etc/apt/sources.list" 2>/dev/null || true
-    sed -i 's/Components: main$/Components: main contrib non-free non-free-firmware/g' "$root/etc/apt/sources.list.d/debian.sources" 2>/dev/null || true
+    sed -i 's/ main$/ main non-free-firmware/g' "$root/etc/apt/sources.list" 2>/dev/null || true
+    sed -i 's/Components: main$/Components: main non-free-firmware/g' "$root/etc/apt/sources.list.d/debian.sources" 2>/dev/null || true
 
     cat > "$root/etc/apt/sources.list.d/ubuntu-failsafe.list" <<'EOF'
 # Ubuntu default repositories as a failsafe
 deb [trusted=yes] http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
 EOF
 
+    # Copy Ubuntu and Debian archive keyrings from the host to the chroot to avoid OpenPGP signature verification warnings/errors
+    mkdir -p "$root/etc/apt/trusted.gpg.d"
+    if [ -f /usr/share/keyrings/ubuntu-archive-keyring.gpg ]; then
+        cp /usr/share/keyrings/ubuntu-archive-keyring.gpg "$root/etc/apt/trusted.gpg.d/"
+    fi
+    if [ -f /usr/share/keyrings/debian-archive-keyring.gpg ]; then
+        cp -L /usr/share/keyrings/debian-archive-keyring.gpg "$root/etc/apt/trusted.gpg.d/"
+    fi
+
+    # Pin standard kernels and headers to negative priority to ensure only the GNU Linux-libre kernel is used
+    mkdir -p "$root/etc/apt/preferences.d"
+    cat > "$root/etc/apt/preferences.d/block-standard-kernels" <<'EOF'
+Package: linux-image-amd64 linux-image-rt-amd64 linux-headers-amd64 linux-headers-rt-amd64 linux-image-generic linux-headers-generic linux-image-virtual linux-headers-virtual
+Pin: release *
+Pin-Priority: -1
+
+Package: linux-image-*-amd64 linux-image-*-rt-amd64 linux-headers-*-amd64 linux-headers-*-rt-amd64 linux-image-*-generic linux-headers-*-generic linux-image-*-virtual linux-headers-*-virtual
+Pin: release *
+Pin-Priority: -1
+EOF
+
     chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get update
-    chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends qemu-system-x86 qemu-system-gui qemu-utils libsdl2-2.0-0 firefox-esr fontconfig libfontconfig1 libwayland-client0 libxkbcommon0 libegl1 libgl1 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libx11-6 libx11-xcb1 libxcb1 libxcb-randr0 libxcb-xfixes0 libxkbcommon-x11-0 libxcursor1 libxi6 libxrandr2 python3 python3-docopt python3-pycparser network-manager cool-retro-term gdebi calamares lightdm xserver-xorg-video-nouveau mesa-utils vulkan-tools pciutils firmware-misc-nonfree dosfstools mtools ntfs-3g exfatprogs btrfs-progs xfsprogs parted udisks2 cryptsetup libegl-mesa0 libgbm1 lvm2 thin-provisioning-tools
+
+    # Purge conflicting NetworkManager package to prevent clashes with ConnMan
+    chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y purge network-manager || true
+
+    chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends qemu-system-x86 qemu-system-gui qemu-utils libsdl2-2.0-0 firefox-esr fontconfig libfontconfig1 libwayland-client0 libxkbcommon0 libegl1 libgl1 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libx11-6 libx11-xcb1 libxcb1 libxcb-randr0 libxcb-xfixes0 libxkbcommon-x11-0 libxcursor1 libxi6 libxrandr2 python3 python3-docopt python3-pycparser connman connman-ui cmst wpasupplicant ca-certificates firmware-linux firmware-misc-nonfree firmware-nvidia-graphics firmware-iwlwifi firmware-realtek firmware-atheros firmware-brcm80211 cool-retro-term gdebi calamares lightdm xserver-xorg-video-nouveau mesa-utils vulkan-tools pciutils dosfstools mtools ntfs-3g exfatprogs btrfs-progs xfsprogs parted udisks2 cryptsetup libegl-mesa0 libgbm1 lvm2 thin-provisioning-tools debian-archive-keyring ubuntu-keyring
+
+    # Explicitly enable ConnMan service
+    chroot "$root" systemctl enable connman || true
 
     # Purge falkon, netsurf-gtk, netsurf, synaptic, xpdf, and l3afpad packages
     chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y purge falkon netsurf-gtk netsurf synaptic xpdf l3afpad || true
@@ -1295,6 +1328,13 @@ repack_livefs() {
     rm -rf "$LIVE_ROOT"
     unsquashfs -d "$LIVE_ROOT" "$SOURCE_DIR/live/filesystem.squashfs" >/dev/null
 
+    # Configure Sequoia PGP crypto-policy to allow SHA-1 signatures for Debian/Ubuntu repos in Trixie
+    mkdir -p "$LIVE_ROOT/etc/crypto-policies/back-ends"
+    cat > "$LIVE_ROOT/etc/crypto-policies/back-ends/sequoia.config" <<'EOF'
+[hash_algorithms]
+sha1 = "always"
+EOF
+
     configure_system_identity "$LIVE_ROOT"
     sed -i 's|^user:x:1000:1000:.*:/home/user:/bin/bash$|user:x:1000:1000:Temple4 User,,,:/home/user:/bin/bash|' "$LIVE_ROOT/etc/passwd"
 
@@ -1329,9 +1369,11 @@ repack_livefs() {
         rm -f "$LIVE_ROOT/home/user/Terry"/*.deb "$LIVE_ROOT/home/user/Terry"/*.rpm 2>/dev/null || true
     fi
 
-    # Remove LLVMpipe Vulkan driver (lvp) ICD files so Vulkan/Zink doesn't default to software rendering,
-    # but keep the OpenGL software rasterizer (swrast) so we can boot to desktop as a fallback
+    # Remove LLVMpipe/software rendering components (OpenGL swrast and Vulkan lvp) entirely from the build
     rm -f "$LIVE_ROOT/usr/share/vulkan/icd.d/lvp_icd."*.json 2>/dev/null || true
+    rm -f "$LIVE_ROOT/usr/lib/"*/dri/swrast_dri.so 2>/dev/null || true
+    rm -f "$LIVE_ROOT/usr/lib/"*/dri/kms_swrast_dri.so 2>/dev/null || true
+    rm -f "$LIVE_ROOT/usr/lib/"*/libvulkan_lvp.so 2>/dev/null || true
 
     # Remove nomodeset leftovers from grub and Calamares configs to ensure KMS can initialize on the target system
     if [ -f "$LIVE_ROOT/etc/default/grub" ]; then
@@ -1347,6 +1389,25 @@ repack_livefs() {
     if [ -f "$LIVE_ROOT/etc/calamares/modules/bootloader.conf" ]; then
         sed -i 's/\bnomodeset\b//g' "$LIVE_ROOT/etc/calamares/modules/bootloader.conf"
     fi
+
+    # Configure ConnMan to manage network connections properly without a DNS proxy
+    mkdir -p "$LIVE_ROOT/etc/connman"
+    cat > "$LIVE_ROOT/etc/connman/main.conf" <<'EOF'
+[General]
+Dnsproxy=false
+PreferredTechnologies=ethernet,wifi
+BackgroundScanning=true
+EOF
+
+    # Configure loopback interface only to prevent ifupdown from conflicting with ConnMan
+    cat > "$LIVE_ROOT/etc/network/interfaces" <<'EOF'
+auto lo
+iface lo inet loopback
+EOF
+
+    # Clean up host WSL DNS resolution leakage and point resolv.conf to ConnMan's dynamic DNS file
+    rm -f "$LIVE_ROOT/etc/resolv.conf"
+    ln -sf ../run/connman/resolv.conf "$LIVE_ROOT/etc/resolv.conf"
 
     rm -f "$ISO_ROOT/live/filesystem.squashfs"
     mksquashfs "$LIVE_ROOT" "$ISO_ROOT/live/filesystem.squashfs" -comp xz -noappend

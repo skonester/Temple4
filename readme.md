@@ -17,7 +17,7 @@
   <a href="LICENSE">
     <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square">
   </a>
-  <img alt="ISO size" src="https://img.shields.io/badge/ISO-889%20MB-2ea44f?style=flat-square">
+  <img alt="ISO size" src="https://img.shields.io/badge/ISO-934%20MB-2ea44f?style=flat-square">
   <img alt="Source storage" src="https://img.shields.io/badge/storage-Git%20LFS-f05032?style=flat-square">
   <img alt="Build status" src="https://img.shields.io/badge/build-verified-success?style=flat-square">
 </p>
@@ -87,8 +87,8 @@ Current release verification:
 
 ```text
 File: Temple4.iso
-Size: 889,210,880 bytes
-SHA256: 0147f3c78dfcbc1f57ed09dfa3690c0fbad5f6882d79ece6d4806cdbacd0e00a
+Size: 934,281,216 bytes
+SHA256: e7c2df4c5be318fb69c8b9f820cbe2ae58c29f5d056f30bbce51f19ab8a50bdb
 ```
 
 After downloading, compare the SHA256 hash of your ISO with the value above
@@ -216,19 +216,59 @@ systems or launchers that still look for the Debian live installer command.
 ### GPU Drivers and Graphics Acceleration
 
 Temple4 includes out-of-the-box hardware graphics acceleration for modern graphics cards, specifically utilizing the open-source Nouveau/NVK driver stack with Zink (OpenGL-on-Vulkan translation) on NVIDIA hardware:
+
 - **Pre-installed Stack**: The system comes pre-installed with `xserver-xorg-video-nouveau`, `mesa-vulkan-drivers`, and `firmware-misc-nonfree` (non-free firmware blobs required for NVIDIA hardware initialization).
+
 - **Out-of-the-box Hardware Acceleration**: KMS (Kernel Mode Setting) is fully enabled, and all `nomodeset` kernel parameter leftovers are automatically removed during the installation. This allows the system to initialize the GPU hardware immediately rather than falling back to CPU-based `llvmpipe` rendering.
-- **Proprietary NVIDIA Drivers**: Since the repositories are configured to include `non-free` and `non-free-firmware` archives, users who want to switch to proprietary drivers on the installed system need to install the kernel headers matching their kernel (for DKMS kernel module compilation) before installing the driver. Run the following commands:
-  ```bash
-  sudo apt update
-  sudo apt install -y linux-headers-amd64
-  sudo apt install -y nvidia-driver firmware-misc-nonfree
-  sudo reboot
-  ```
+
+- **Proprietary NVIDIA Drivers**: Since the repositories are configured to include `non-free` and `non-free-firmware` archives, users who want to switch to proprietary drivers on the installed system need to install the kernel headers matching their kernel (for DKMS kernel module compilation) before installing the driver.
+
+#### Switching to Proprietary NVIDIA Drivers (Debian Trixie)
+
+**Important**: The proprietary NVIDIA driver requires DKMS module compilation. Because the default Temple4 Libre kernel (`6.18.20-gnu`) does not have pre-compiled headers in standard repositories, you **must first install and boot the standard Debian kernel** before installing the NVIDIA driver:
+
+```bash
+# 1. Update package lists
+sudo apt update
+
+# 2. Install the standard Debian kernel and headers
+sudo apt install -y linux-image-amd64 linux-headers-amd64
+
+# 3. Reboot the system to load the standard Debian kernel
+sudo reboot
+```
+
+After booting back up under the standard Debian kernel, install the proprietary driver:
+
+```bash
+# 4. Install the NVIDIA driver and firmware
+sudo apt install -y nvidia-driver firmware-misc-nonfree
+
+# 5. Reboot to load the NVIDIA driver
+sudo reboot
+```
+
+**Common Issues and Solutions**:
+
+- **Black screen after reboot**: Boot with `nouveau.modeset=0` kernel parameter, then run `sudo nvidia-xconfig` to generate a proper X11 config.
+
+- **Secure Boot**: If Secure Boot is enabled, you may need to sign the NVIDIA kernel module or disable Secure Boot in your BIOS.
+
+- **Driver version**: Debian Trixie provides `nvidia-driver` (currently 535.x series). For newer GPUs (RTX 40xx), this should work. For older cards, you may need `nvidia-legacy-XXX-driver` packages.
+
+- **CUDA support**: Install `nvidia-cuda-toolkit` after the driver is working for CUDA development.
+
+- **Multiple GPUs (Optimus)**: For laptops with both Intel and NVIDIA GPUs, install `nvidia-prime` and use `sudo prime-select nvidia` to switch to the discrete GPU.
+
+- **Verification**: After reboot, run `nvidia-smi` to verify the driver is loaded correctly. You should see your GPU details and driver version.
+
+**Note**: The Nouveau driver remains blacklisted after installing the proprietary driver. To switch back to Nouveau, remove the `nvidia-driver` package and run `sudo apt install --reinstall xserver-xorg-video-nouveau`.
 
 ### Installer Optimization & Cleanups
+
 The integrated Calamares installer has been optimized for reliability and cleanliness:
-- **Offline Install Friendly**: The package manager module is configured to use a dummy backend to prevent offline install failures (Error 100).
+
+- **Offline Install Friendly**: The package manager module is configured to use a dummy backend to prevent offline install failures (Error 100). This ensures installations complete successfully without requiring internet access.
 - **Clean Home Directory**: The user home payload (`/home/user/Terry`) and system skeleton template (`/etc/skel/Terry`) are automatically cleaned of installer packages (such as raw `.deb` and `.rpm` files) during target generation. The installed target system only retains the necessary `.ISO` payloads required for emulating TempleOS and ZealOS.
 
 ### USB and SSD Install Notes
@@ -265,37 +305,26 @@ Removed software can be reinstalled later with `sudo apt install`.
 
 ## Building On Windows With WSL
 
-The build scripts are intended to run from Windows through WSL. They do not
-require a specific WSL distro; Ubuntu, Debian, Fedora, Arch, and similar WSL
-environments are fine as long as the required packages are installed.
+The build script is designed to run from Windows through a Debian-based WSL distribution (Debian or Ubuntu WSL). Other distributions are not supported.
 
-From PowerShell, install WSL if you do not already have it:
+From PowerShell, install WSL (which defaults to Ubuntu) if you do not already have it:
 
 ```powershell
 wsl --install
 ```
 
-Restart if Windows asks you to, then open your WSL distro and install the
-basic build tools for that distro.
-
-Debian or Ubuntu WSL:
+Restart if Windows asks you to, then open your Debian or Ubuntu WSL distribution. The build script automatically detects and installs its own required build packages on a fresh setup, but you can also install them and standard emulation utilities manually:
 
 ```bash
 sudo apt update
 sudo apt install -y git git-lfs xorriso squashfs-tools syslinux-common rsync qemu-system-x86 qemu-utils ovmf
 ```
 
-Fedora WSL:
-
-```bash
-sudo dnf install -y git git-lfs xorriso squashfs-tools syslinux rsync qemu-system-x86 qemu-img edk2-ovmf
-```
-
 Clone the repo from inside WSL, enter it, and pull the Git LFS assets:
 
 ```bash
-git clone <repo-url> OpenTexas
-cd OpenTexas
+git clone <repo-url> Temple4
+cd Temple4
 git lfs install
 git lfs pull
 ```
@@ -303,19 +332,13 @@ git lfs pull
 Build the runtime-lite ISO (including live filesystem repack and runtime packages):
 
 ```bash
-INSTALL_RUNTIME=1 REPACK_LIVEFS=1 ./build_temple4_wsl.sh
+./build_temple4_wsl.sh
 ```
 
 The output defaults to:
 
 ```text
-~/temple4_work/Temple4-quick.iso
-```
-
-For a fast boot-menu-only rebuild that skips the live filesystem repack, run:
-
-```bash
-./build_temple4_wsl.sh
+~/temple4_work/Temple4.iso
 ```
 
 The script checks that it is running in WSL and prints package-install hints
@@ -343,24 +366,24 @@ TempleOS-family systems from a modern desktop.
 ## Why a Linux Live Environment?
 
 A question that surfaces repeatedly in the TempleOS community is: *why put a
-Linux live system around TempleOS at all?* That is the criticism Temple4 needs
-to answer carefully. Temple4 does not make TempleOS run "on top of Linux."
-TempleOS remains a separate operating system image. When launched through QEMU,
-it runs as a guest machine, not as a Linux program.
+Linux live system around TempleOS at all?* This criticism deserves a careful
+answer. Temple4 does not make TempleOS run "on top of Linux." TempleOS remains
+a separate operating system image. When launched through QEMU, it runs as a guest
+machine, not as a Linux program.
 
 The purpose of Temple4 is narrower: provide a small bootable workspace that
 keeps the TempleOS-family payloads, launch commands, installer, and recovery
 tools in one place. Linux is the carrier environment, not the thing being
 preserved.
 
-### Terry's Operating Environment Was a Teaching Tool
+### TempleOS as a Teaching Tool
 
 TempleOS was written by a single developer over many years. Terry's own FAQ
-says he wrote the system himself and that TempleOS includes its own source,
-compiler, kernel, and boot loaders rather than relying on GNU/Linux code.
-That matters because TempleOS was not trying to become another conventional
-Unix-like system. It was meant to be small enough to study directly, from its
-kernel through its compiler and user environment.[^templeos-faq]
+states that he wrote the system himself and that TempleOS includes its own
+source, compiler, kernel, and boot loaders rather than relying on GNU/Linux
+code.[^templeos-faq] This matters because TempleOS was not trying to become
+another conventional Unix-like system. It was meant to be small enough to study
+directly, from its kernel through its compiler and user environment.
 
 That same FAQ gives the practical boundary: TempleOS can run on some older
 64-bit PCs, but otherwise should be run in a virtual machine such as VMware,
@@ -368,10 +391,10 @@ QEMU, or VirtualBox.[^templeos-faq] This supports Temple4's use of QEMU as a
 launcher target. It does not support claiming that TempleOS is a Linux-based
 system, or that Linux is part of TempleOS.
 
-The archived TempleOS README makes the same separation in a different way: to
-use TempleOS, you boot the ISO or point a virtual machine at it, and its source
-is compiled by the TempleOS compiler inside that booted environment.[^templeos-readme]
-That is the line Temple4 tries to preserve.
+The archived TempleOS README makes the same separation: to use TempleOS, you
+boot the ISO or point a virtual machine at it, and its source is compiled by the
+TempleOS compiler inside that booted environment.[^templeos-readme] This is
+the line Temple4 tries to preserve.
 
 ### The Host Is Not the Temple
 
@@ -379,14 +402,11 @@ The important distinction is between the live environment and the artifact
 being studied. TempleOS itself stays independent: its FAQ says it does not
 access the primary operating system's files and has no networking.[^templeos-faq]
 Running TempleOS under QEMU does not turn it into a Linux application. QEMU
-presents virtual hardware to a guest OS.
-
-QEMU is relevant here because it is an open source machine emulator and
-virtualizer that can present a complete virtual machine to a guest OS.[^qemu]
-Temple4 uses that existing boundary instead of blurring it.
+presents virtual hardware to a guest OS, and Temple4 uses that existing
+boundary instead of blurring it.[^qemu]
 
 Exodus is the exception, and it should be described as such. Exodus is not
-stock TempleOS booting on Linux; its own README describes it as a port of the
+stock TempleOS booting on Linux; its README describes it as a port of the
 TempleOS kernel to userspace for x86_64 Linux, Windows, and FreeBSD, allowing
 TempleOS study without a virtual machine.[^exodus] Temple4 includes Exodus
 because that mode is useful for inspection and learning, while still keeping
@@ -399,12 +419,11 @@ programmer a radically direct environment, and Temple4 should not erase that
 fact. But ring 0 by itself does not make a system practical as a daily driver
 on modern hardware. A usable bare-metal operating system also needs device
 detection, driver matching, storage, display, input, power management, and many
-other pieces of hardware support. OSDev documentation describes drivers and
-device management as core operating-system infrastructure, not optional polish.[^osdev-drivers][^osdev-device-management]
+other pieces of hardware support.[^osdev-drivers][^osdev-device-management]
 
 This is the practical problem Temple4 is trying not to hide. The archived
-TempleOS README says TempleOS may require the user to manually enter I/O port
-addresses for CD/DVD and hard drives, and notes that automatic detection was
+TempleOS README notes that TempleOS may require the user to manually enter I/O
+port addresses for CD/DVD and hard drives, and that automatic detection was
 too difficult for TempleOS to do reliably.[^templeos-readme] That is not a
 failure of the idea; it is the cost of a small, understandable, ring-0 system
 meeting messy PC hardware.
@@ -432,10 +451,7 @@ FreeBSD describes itself as based on 4.4BSD-Lite, and the FreeBSD project
 explains BSD as an open source derivative of AT&T Research UNIX.[^freebsd-handbook][^freebsd-explaining-bsd]
 illumos-based systems such as Tribblix and OpenIndiana are also real
 alternatives for people who want to experiment with a Solaris-descended
-userland. Tribblix describes itself as an illumos-derived distribution with a
-retro style and modern components, while OpenIndiana is an illumos-based
-continuation of the OpenSolaris line with technologies such as ZFS and
-DTrace.[^tribblix][^openindiana]
+userland.[^tribblix][^openindiana]
 
 Those hosts may be the "purer" answer for someone who wants to avoid the Linux
 ecosystem while still using a serious Unix-like system. But they do not remove
@@ -464,6 +480,56 @@ Temple4 is not pretending one branch is spiritually pure and the others are
 not. It is choosing the host lineage that gets out of the way fastest for the
 people trying to study TempleOS-family work now.
 
+### If Terry Were Here Today
+
+Terry's own FAQ addresses the practical reality of TempleOS development: "Why do
+you dual boot? TempleOS is 100% independent -- it does not access the files of
+your primary operating system and TempleOS will work as the only operating
+system on your computer, but it has no networking. In your off hours, you will
+use your other operating system."[^templeos-faq]
+
+This pragmatic approach is instructive. Terry recognized that TempleOS, for all
+its elegance and completeness as a standalone system, needed a host environment
+for practical tasks—networking, modern hardware support, and everyday
+productivity. He did not reject Linux or other host systems as inherently wrong;
+he simply acknowledged that TempleOS served a different purpose.
+
+If Terry were here today, he would likely see the need for practical tools that
+make TempleOS accessible to more people. Temple4 follows this same spirit: it
+does not try to replace TempleOS with Linux, but rather provides a practical
+workspace where the TempleOS-family systems can be studied, preserved, and
+shared. The goal is not ideological purity, but accessibility and continuity of
+Terry's work for future generations.
+
+### The Value of HolyC
+
+The distro authors recognized that the real value of TempleOS was not its
+technical completeness as an operating system, but Terry's HolyC programming
+language. HolyC was designed with a clarity and directness that modern
+languages like Rust or C# cannot match:
+
+- **No hidden complexity**: HolyC has no borrow checker, lifetimes, or async
+  runtime like Rust. There is no garbage collector, no runtime, no hidden
+  allocations. What you write is what you get.
+
+- **Complete understanding**: A single person can understand all of HolyC's
+  semantics. Rust's ownership model, while powerful, spans thousands of pages
+  of documentation. C# runs on a massive runtime with decades of legacy.
+
+- **JIT integration**: HolyC was designed from the ground up for JIT
+  compilation. Code compiles and runs immediately, with no separate build step
+  or complex toolchain.
+
+- **No undefined behavior**: In HolyC, everything is defined. There are no
+  "nasal demons" or platform-specific quirks. The language does exactly what
+  you tell it to do.
+
+- **Designed for humans**: HolyC was created by one person for his own use,
+  not by committee. It reflects Terry's vision of programming as a direct,
+  unmediated conversation between programmer and machine.
+
+This is why Temple4 includes `holyc` and `holyc-demo` commands: to preserve
+access to Terry's programming philosophy, not just his operating system.
 
 ## Sources
 
