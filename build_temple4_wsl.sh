@@ -1,35 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Temple4 ISO remaster for WSL.
-# Canonical release builds should use ./full_build_wsl.sh, which enables the
-# runtime-lite profile and writes Temple4-runtime-lite.iso.
-# Direct execution defaults to quick mode for low-level smoke/debug builds.
+# Temple4 runtime-lite ISO remaster for Debian WSL.
+#
+# This script intentionally builds the release-style image only:
+#   - repacks the live filesystem
+#   - installs Temple4 runtime packages
+#   - applies the lite strip profile
+#   - writes Temple4-runtime-lite.iso next to this script
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/scripts/wsl_common.sh"
 
 SOURCE_DIR="${SOURCE_DIR:-$SCRIPT_DIR/Temple4}"
 CIA_DIR="${CIA_DIR:-$SCRIPT_DIR/CIA Protected}"
-WORK_DIR="${WORK_DIR:-$HOME/temple4_work}"
+WORK_DIR="${WORK_DIR:-/tmp/temple4_work}"
 ISO_ROOT="${ISO_ROOT:-$WORK_DIR/iso_root}"
 LIVE_ROOT="${LIVE_ROOT:-$WORK_DIR/squashfs-root}"
-OUTPUT_ISO="${OUTPUT_ISO:-$WORK_DIR/Temple4-quick.iso}"
+OUTPUT_ISO="$SCRIPT_DIR/Temple4-runtime-lite.iso"
 ISOHYBRID_MBR="${ISOHYBRID_MBR:-}"
-REPACK_LIVEFS="${REPACK_LIVEFS:-0}"
-STRIP_PROFILE="${STRIP_PROFILE:-none}"
-INSTALL_RUNTIME="${INSTALL_RUNTIME:-0}"
+REPACK_LIVEFS=1
+STRIP_PROFILE=lite
+INSTALL_RUNTIME=1
 VOLUME_ID="${VOLUME_ID:-TEMPLE4}"
-OWNER_UID="${SUDO_UID:-$(id -u)}"
-OWNER_GID="${SUDO_GID:-$(id -g)}"
+OWNER_UID="${OWNER_UID:-${SUDO_UID:-$(stat -c '%u' "$SCRIPT_DIR" 2>/dev/null || id -u)}}"
+OWNER_GID="${OWNER_GID:-${SUDO_GID:-$(stat -c '%g' "$SCRIPT_DIR" 2>/dev/null || id -g)}}"
 
 require_wsl_environment "Temple4 ISO build"
 
-if [ "$STRIP_PROFILE" != "none" ] || [ "$INSTALL_RUNTIME" = "1" ]; then
-    REPACK_LIVEFS=1
-fi
-
-if { [ "$REPACK_LIVEFS" = "1" ] || [ "$STRIP_PROFILE" != "none" ] || [ "$INSTALL_RUNTIME" = "1" ]; } && [ "$(id -u)" -ne 0 ]; then
+if [ "$(id -u)" -ne 0 ]; then
     require_command_hint sudo sudo
     exec sudo env \
         SOURCE_DIR="$SOURCE_DIR" \
@@ -37,11 +36,10 @@ if { [ "$REPACK_LIVEFS" = "1" ] || [ "$STRIP_PROFILE" != "none" ] || [ "$INSTALL
         WORK_DIR="$WORK_DIR" \
         ISO_ROOT="$ISO_ROOT" \
         LIVE_ROOT="$LIVE_ROOT" \
-        OUTPUT_ISO="$OUTPUT_ISO" \
-        REPACK_LIVEFS="$REPACK_LIVEFS" \
-        STRIP_PROFILE="$STRIP_PROFILE" \
-        INSTALL_RUNTIME="$INSTALL_RUNTIME" \
         VOLUME_ID="$VOLUME_ID" \
+        ISOHYBRID_MBR="$ISOHYBRID_MBR" \
+        OWNER_UID="$OWNER_UID" \
+        OWNER_GID="$OWNER_GID" \
         bash "$0" "$@"
 fi
 
@@ -1249,16 +1247,11 @@ install_runtime_packages() {
     sed -i 's/ main$/ main non-free-firmware/g' "$root/etc/apt/sources.list" 2>/dev/null || true
     sed -i 's/Components: main$/Components: main non-free-firmware/g' "$root/etc/apt/sources.list.d/debian.sources" 2>/dev/null || true
 
-    cat > "$root/etc/apt/sources.list.d/ubuntu-failsafe.list" <<'EOF'
-# Ubuntu default repositories as a failsafe
-deb [trusted=yes] http://archive.ubuntu.com/ubuntu/ noble main restricted universe multiverse
-EOF
+    rm -f "$root/etc/apt/sources.list.d/ubuntu-failsafe.list"
+    rm -f "$root/etc/apt/trusted.gpg.d/ubuntu-"*.gpg "$root/usr/share/keyrings/ubuntu-"*.gpg 2>/dev/null || true
 
-    # Copy Ubuntu and Debian archive keyrings from the host to the chroot to avoid OpenPGP signature verification warnings/errors
+    # Copy the Debian archive keyring from the host to the chroot to avoid OpenPGP signature verification warnings/errors.
     mkdir -p "$root/etc/apt/trusted.gpg.d"
-    if [ -f /usr/share/keyrings/ubuntu-archive-keyring.gpg ]; then
-        cp /usr/share/keyrings/ubuntu-archive-keyring.gpg "$root/etc/apt/trusted.gpg.d/"
-    fi
     if [ -f /usr/share/keyrings/debian-archive-keyring.gpg ]; then
         cp -L /usr/share/keyrings/debian-archive-keyring.gpg "$root/etc/apt/trusted.gpg.d/"
     fi
@@ -1277,10 +1270,14 @@ EOF
 
     chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get update
 
+    if chroot "$root" dpkg-query -W ubuntu-keyring >/dev/null 2>&1; then
+        chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y purge ubuntu-keyring || true
+    fi
+
     # Purge conflicting NetworkManager package to prevent clashes with ConnMan
     chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y purge network-manager || true
 
-    chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends qemu-system-x86 qemu-system-gui qemu-utils libsdl2-2.0-0 firefox-esr fontconfig libfontconfig1 libwayland-client0 libxkbcommon0 libegl1 libgl1 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libx11-6 libx11-xcb1 libxcb1 libxcb-randr0 libxcb-xfixes0 libxkbcommon-x11-0 libxcursor1 libxi6 libxrandr2 python3 python3-docopt python3-pycparser connman connman-ui cmst wpasupplicant ca-certificates firmware-linux firmware-misc-nonfree firmware-nvidia-graphics firmware-iwlwifi firmware-realtek firmware-atheros firmware-brcm80211 cool-retro-term gdebi calamares lightdm xserver-xorg-video-nouveau mesa-utils vulkan-tools pciutils dosfstools mtools ntfs-3g exfatprogs btrfs-progs xfsprogs parted udisks2 cryptsetup libegl-mesa0 libgbm1 lvm2 thin-provisioning-tools debian-archive-keyring ubuntu-keyring
+    chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends qemu-system-x86 qemu-system-gui qemu-utils libsdl2-2.0-0 firefox-esr fontconfig libfontconfig1 libwayland-client0 libxkbcommon0 libegl1 libgl1 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libx11-6 libx11-xcb1 libxcb1 libxcb-randr0 libxcb-xfixes0 libxkbcommon-x11-0 libxcursor1 libxi6 libxrandr2 python3 python3-docopt python3-pycparser connman connman-ui cmst wpasupplicant ca-certificates firmware-linux firmware-misc-nonfree firmware-nvidia-graphics firmware-iwlwifi firmware-realtek firmware-atheros firmware-brcm80211 cool-retro-term gdebi calamares lightdm xserver-xorg-video-nouveau mesa-utils vulkan-tools pciutils dosfstools mtools ntfs-3g exfatprogs btrfs-progs xfsprogs parted udisks2 cryptsetup libegl-mesa0 libgbm1 lvm2 thin-provisioning-tools debian-archive-keyring
 
     # Explicitly enable ConnMan service
     chroot "$root" systemctl enable connman || true
@@ -1328,7 +1325,7 @@ repack_livefs() {
     rm -rf "$LIVE_ROOT"
     unsquashfs -d "$LIVE_ROOT" "$SOURCE_DIR/live/filesystem.squashfs" >/dev/null
 
-    # Configure Sequoia PGP crypto-policy to allow SHA-1 signatures for Debian/Ubuntu repos in Trixie
+    # Configure Sequoia PGP crypto-policy to allow SHA-1 signatures for Debian repos in Trixie
     mkdir -p "$LIVE_ROOT/etc/crypto-policies/back-ends"
     cat > "$LIVE_ROOT/etc/crypto-policies/back-ends/sequoia.config" <<'EOF'
 [hash_algorithms]
@@ -1436,7 +1433,7 @@ echo "=== Temple4 WSL ISO Build ==="
 echo "Source: $SOURCE_DIR"
 echo "Work:   $WORK_DIR"
 echo "Output: $OUTPUT_ISO"
-echo "Mode:   $([ "$REPACK_LIVEFS" = "1" ] && echo livefs-repack || echo quick)"
+echo "Mode:   runtime-lite livefs-repack"
 echo "Strip:  $STRIP_PROFILE"
 echo "Runtime install: $INSTALL_RUNTIME"
 
@@ -1455,11 +1452,7 @@ mkdir -p "$ISO_ROOT"
 copy_tree "$SOURCE_DIR" "$ISO_ROOT"
 soft_rebrand_iso_root
 
-if [ "$REPACK_LIVEFS" = "1" ]; then
-    repack_livefs
-else
-    echo "Skipping live filesystem repack. Set REPACK_LIVEFS=1 for userland injection."
-fi
+repack_livefs
 
 build_iso
 

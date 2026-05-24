@@ -17,7 +17,7 @@
   <a href="LICENSE">
     <img alt="License" src="https://img.shields.io/badge/license-GPL--3.0--or--later-blue?style=flat-square">
   </a>
-  <img alt="ISO size" src="https://img.shields.io/badge/ISO-934%20MB-2ea44f?style=flat-square">
+  <img alt="ISO size" src="https://img.shields.io/badge/ISO-1.09%20GB-2ea44f?style=flat-square">
   <img alt="Source storage" src="https://img.shields.io/badge/storage-Git%20LFS-f05032?style=flat-square">
   <img alt="Build status" src="https://img.shields.io/badge/build-verified-success?style=flat-square">
 </p>
@@ -80,15 +80,15 @@ use it as a live desktop or install it from the included installer.
 </p>
 
 ```text
-Temple4.iso
+Temple4-runtime-lite.iso
 ```
 
 Current release verification:
 
 ```text
-File: Temple4.iso
-Size: 934,281,216 bytes
-SHA256: e7c2df4c5be318fb69c8b9f820cbe2ae58c29f5d056f30bbce51f19ab8a50bdb
+File: Temple4-runtime-lite.iso
+Size: 1,092,157,440 bytes
+SHA256: 3ab4d70aa3fae57eb13a6f8eb2916d8222374817424f89fc9059bba3425324d3
 ```
 
 After downloading, compare the SHA256 hash of your ISO with the value above
@@ -305,15 +305,17 @@ Removed software can be reinstalled later with `sudo apt install`.
 
 ## Building On Windows With WSL
 
-The build script is designed to run from Windows through a Debian-based WSL distribution (Debian or Ubuntu WSL). Other distributions are not supported.
+The build script is designed to run from Windows through Debian WSL. Other
+distributions are not supported for release builds.
 
-From PowerShell, install WSL (which defaults to Ubuntu) if you do not already have it:
+From PowerShell, install Debian WSL if you do not already have it:
 
 ```powershell
-wsl --install
+wsl --install -d Debian
 ```
 
-Restart if Windows asks you to, then open your Debian or Ubuntu WSL distribution. The build script automatically detects and installs its own required build packages on a fresh setup, but you can also install them and standard emulation utilities manually:
+Restart if Windows asks you to, then open Debian WSL. Install the host-side
+build tools:
 
 ```bash
 sudo apt update
@@ -335,15 +337,16 @@ Build the runtime-lite ISO (including live filesystem repack and runtime package
 ./build_temple4_wsl.sh
 ```
 
-The output defaults to:
+The script builds only the runtime-lite release profile. It uses `/tmp/temple4_work`
+as scratch space and writes the ISO next to the script:
 
 ```text
-~/temple4_work/Temple4.iso
+Temple4-runtime-lite.iso
 ```
 
-The script checks that it is running in WSL and prints package-install hints
-when a required command is missing. Set `ALLOW_NON_WSL=1` only if you
-intentionally want to run the same script on a regular Linux host.
+Run it as your regular Debian WSL user; it will re-exec through `sudo` for the
+live filesystem repack and then hand the output back to the checkout owner. It
+also works when launched as root with `wsl.exe -d Debian -u root`.
 
 ## License
 
