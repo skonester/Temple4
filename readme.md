@@ -271,17 +271,6 @@ The integrated Calamares installer has been optimized for reliability and cleanl
 - **Offline Install Friendly**: The package manager module is configured to use a dummy backend to prevent offline install failures (Error 100). This ensures installations complete successfully without requiring internet access.
 - **Clean Home Directory**: The user home payload (`/home/user/Terry`) and system skeleton template (`/etc/skel/Terry`) are automatically cleaned of installer packages (such as raw `.deb` and `.rpm` files) during target generation. The installed target system only retains the necessary `.ISO` payloads required for emulating TempleOS and ZealOS.
 
-### USB and SSD Install Notes
-
-Installing to a USB drive or SSD can complete successfully even if the system
-does not boot afterward. In that case, the important part is that the payload
-was written: the live filesystem, Temple4 desktop files, Temple-family payloads,
-and installed userland can be present on the target drive while the firmware
-still fails before it reaches them. If installation appears to finish but the
-machine does not boot, first reboot and re-check the firmware boot target before
-treating the install as failed.
-
-
 ## Runtime-Lite Profile
 
 The downloadable release uses the runtime-lite profile. It keeps the core
