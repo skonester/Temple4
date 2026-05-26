@@ -11,6 +11,9 @@
   <a href="https://github.com/skonester/Temple4/releases">
     <img alt="Release archive" src="https://img.shields.io/badge/Releases-Archive-0969da?style=for-the-badge&logo=github">
   </a>
+  <a href="https://github.com/skonester/Temple4/releases">
+    <img alt="GitHub release downloads" src="https://img.shields.io/github/downloads/skonester/Temple4/total?style=for-the-badge&logo=github&label=Downloads">
+  </a>
 </p>
 
 <p align="center">
