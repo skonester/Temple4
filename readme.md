@@ -80,8 +80,8 @@ Current release verification:
 
 ```text
 File: Temple4-runtime-lite.iso
-Size: 1,092,157,440 bytes
-SHA256: 3ab4d70aa3fae57eb13a6f8eb2916d8222374817424f89fc9059bba3425324d3
+Size: 1,218,756,608 bytes
+SHA256: 164830434571ed9dc18ec4125b1d163fb251a42e954856e3f0032a09e3923543
 ```
 
 After downloading, compare the SHA256 hash of your ISO with the value above
