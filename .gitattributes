@@ -3,5 +3,7 @@
 *.[sS][qQ][uU][aA][sS][hH][fF][sS] filter=lfs diff=lfs merge=lfs -text
 *.[dD][eE][bB] filter=lfs diff=lfs merge=lfs -text
 *.[rR][pP][mM] filter=lfs diff=lfs merge=lfs -text
+*.[cC][pP][iI][oO].[gG][zZ] filter=lfs diff=lfs merge=lfs -text
+*.[wW][aA][dD] filter=lfs diff=lfs merge=lfs -text
 **/vmlinuz filter=lfs diff=lfs merge=lfs -text
 *.sh text eol=lf

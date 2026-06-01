@@ -214,14 +214,45 @@ if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
     exit 1
 fi
 
+if ! command -v qemu-img >/dev/null 2>&1; then
+    zenity --error --text='qemu-img is not installed in this live image.' 2>/dev/null || printf '%s\n' 'qemu-img is not installed in this live image.' >&2
+    exit 1
+fi
+
+temple_iso=""
 for iso in "$HOME/Terry/TempleOS.ISO" "/run/live/medium/Temple4/TempleOS.ISO"; do
     if [ -f "$iso" ]; then
-        exec qemu-system-x86_64 -m 512 -cdrom "$iso" -boot d -display gtk,gl=off -name TempleOS
+        temple_iso="$iso"
+        break
     fi
 done
 
-printf '%s\n' 'TempleOS.ISO was not found in ~/Terry or /run/live/medium/Temple4.' >&2
-exit 1
+if [ -z "$temple_iso" ]; then
+    printf '%s\n' 'TempleOS.ISO was not found in ~/Terry or /run/live/medium/Temple4.' >&2
+    exit 1
+fi
+
+vm_dir="${TEMPLE4_TEMPLEOS_HOME:-$HOME/TempleOS/TempleOS}"
+disk="$vm_dir/TempleOS.qcow2"
+mkdir -p "$vm_dir"
+
+if [ ! -f "$disk" ]; then
+    qemu-img create -f qcow2 "$disk" 512M >/dev/null || {
+        printf '%s\n' "Failed to create persistent disk: $disk" >&2
+        exit 1
+    }
+fi
+
+export NO_AT_BRIDGE=1
+export GTK_A11Y=none
+
+exec qemu-system-x86_64 \
+    -m 512 \
+    -cdrom "$temple_iso" \
+    -boot d \
+    -drive "file=$disk,format=qcow2,if=ide,index=0,media=disk" \
+    -display gtk,gl=off \
+    -name TempleOS
 EOF
 
     cat > "$root/usr/local/bin/temple4-run-zealos" <<'EOF'
@@ -233,24 +264,121 @@ if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
     exit 1
 fi
 
+if ! command -v qemu-img >/dev/null 2>&1; then
+    zenity --error --text='qemu-img is not installed in this live image.' 2>/dev/null || printf '%s\n' 'qemu-img is not installed in this live image.' >&2
+    exit 1
+fi
+
+zeal_iso=""
 for iso in "$HOME/Terry/ZealOS-BSD2-UEFI-2025-11-10-02_56_42.iso" "/run/live/medium/Temple4/ZealOS-BSD2-UEFI-2025-11-10-02_56_42.iso"; do
     if [ -f "$iso" ]; then
-        exec qemu-system-x86_64 \
-            -m 1024 \
-            -device ich9-ahci,id=ahci \
-            -drive "if=none,id=zealcd,media=cdrom,readonly=on,file=$iso" \
-            -device ide-cd,bus=ahci.0,drive=zealcd \
-            -boot d \
-            -display gtk,gl=off \
-            -name ZealOS
+        zeal_iso="$iso"
+        break
     fi
 done
 
-printf '%s\n' 'ZealOS ISO was not found in ~/Terry or /run/live/medium/Temple4.' >&2
-exit 1
+if [ -z "$zeal_iso" ]; then
+    printf '%s\n' 'ZealOS ISO was not found in ~/Terry or /run/live/medium/Temple4.' >&2
+    exit 1
+fi
+
+vm_dir="${TEMPLE4_ZEALOS_HOME:-$HOME/TempleOS/ZealOS}"
+disk="$vm_dir/ZealOS.qcow2"
+mkdir -p "$vm_dir"
+
+if [ ! -f "$disk" ]; then
+    qemu-img create -f qcow2 "$disk" 2G >/dev/null || {
+        printf '%s\n' "Failed to create persistent disk: $disk" >&2
+        exit 1
+    }
+fi
+
+export NO_AT_BRIDGE=1
+export GTK_A11Y=none
+
+exec qemu-system-x86_64 \
+    -m 1024 \
+    -device ich9-ahci,id=ahci \
+    -drive "if=none,id=zealdisk,file=$disk,format=qcow2,media=disk" \
+    -device ide-hd,bus=ahci.1,drive=zealdisk \
+    -drive "if=none,id=zealcd,media=cdrom,readonly=on,file=$zeal_iso" \
+    -device ide-cd,bus=ahci.0,drive=zealcd \
+    -boot d \
+    -display gtk,gl=off \
+    -name ZealOS
 EOF
 
     chmod +x "$root/usr/local/bin/temple4-run-templeos" "$root/usr/local/bin/temple4-run-zealos"
+
+    cat > "$root/usr/local/bin/temple4-run-holy-linux" <<'EOF'
+#!/bin/sh
+set -eu
+
+appdir="/opt/holy-linux"
+kernel="$appdir/kernel/bzImage"
+initrd="$appdir/build/initramfs.cpio.gz"
+
+if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
+    printf '%s\n' 'QEMU is not installed in this live image.' >&2
+    exit 1
+fi
+
+if [ ! -f "$kernel" ] && [ -f "$appdir/kernel/vmlinuz-virt" ]; then
+    kernel="$appdir/kernel/vmlinuz-virt"
+fi
+
+if [ ! -f "$initrd" ] && [ -f "$appdir/initramfs.cpio.gz" ]; then
+    initrd="$appdir/initramfs.cpio.gz"
+fi
+
+if [ ! -f "$kernel" ] || [ ! -f "$initrd" ]; then
+    cat >&2 <<'MSG'
+Holy-Linux is installed, but its bootable kernel/initramfs payload is not built yet.
+
+Temple4 launches Holy-Linux as a tiny QEMU guest in this terminal. It uses
+Holy-Linux's direct kernel/initramfs path, so the UEFI disk image and bootloader
+path are not needed here.
+
+To build the payload, run:
+  cd /opt/holy-linux
+  sudo ./build.sh
+
+Temple4 can also boot a prebuilt payload placed at:
+  /opt/holy-linux/initramfs.cpio.gz
+
+Then launch Holy-Linux again from the desktop or with:
+  temple4-run-holy-linux
+MSG
+    exit 1
+fi
+
+log="${XDG_RUNTIME_DIR:-/tmp}/temple4-holy-linux-qemu.log"
+printf '%s\n' "Starting Holy-Linux..." "Kernel: $kernel" "Initramfs: $initrd" "Log: $log"
+
+set +e
+qemu-system-x86_64 \
+    -kernel "$kernel" \
+    -initrd "$initrd" \
+    -append "console=ttyS0 rdinit=/init" \
+    -display none \
+    -serial stdio \
+    -monitor none \
+    -m 2048M \
+    -name Holy-Linux 2>"$log"
+status=$?
+set -e
+
+if [ "$status" -ne 0 ]; then
+    printf '\nHoly-Linux QEMU exited with status %s.\n' "$status" >&2
+    printf 'QEMU stderr log:\n' >&2
+    sed -n '1,120p' "$log" >&2
+fi
+
+printf '\nPress Enter to close this terminal... '
+read _answer || true
+exit "$status"
+EOF
+    chmod +x "$root/usr/local/bin/temple4-run-holy-linux"
 
     cat > "$root/usr/local/bin/temple4-run-exodus" <<'EOF'
 #!/bin/sh
@@ -265,6 +393,271 @@ exit 1
 EOF
 
     chmod +x "$root/usr/local/bin/temple4-run-exodus"
+
+    cat > "$root/usr/local/bin/temple4-run-toom" <<'EOF'
+#!/bin/sh
+set -eu
+
+if ! command -v exodus >/dev/null 2>&1; then
+    zenity --error --text='Exodus is not installed in this live image.' 2>/dev/null || printf '%s\n' 'Exodus is not installed in this live image.' >&2
+    exit 1
+fi
+
+if [ ! -f /usr/share/exodus/HCRT.BIN ]; then
+    printf '%s\n' 'Exodus runtime file /usr/share/exodus/HCRT.BIN was not found.' >&2
+    exit 1
+fi
+
+if [ ! -d /opt/toom ]; then
+    printf '%s\n' 'TOOM was not found at /opt/toom.' >&2
+    exit 1
+fi
+
+toom_home="${TOOM_HOME:-$HOME/TOOM}"
+if [ ! -d "$toom_home" ]; then
+    mkdir -p "$toom_home"
+    cp -a /opt/toom/. "$toom_home"/
+else
+    for bad_path in Adam Apps AutoComplete BlkDev2 Boot Compiler Demo Doc Downloads Home Kernel Misc Once.HC PersonalMenu.DD PersonalNotes.DD MakeHome.HC HomeSys.HC HomeWrappers.HC HomeKeyPlugIns.HC; do
+        rm -rf "$toom_home/$bad_path"
+    done
+    (cd /opt/toom && find . -type f ! -iname '*.wad' ! -path './freedoom-0.12.1/*' -print) | while IFS= read -r path; do
+        mkdir -p "$toom_home/$(dirname "$path")"
+        cp "/opt/toom/$path" "$toom_home/$path"
+    done
+    for wad_path in /opt/toom/*.wad /opt/toom/*.WAD; do
+        [ -f "$wad_path" ] || continue
+        wad_name="$(basename "$wad_path")"
+        [ -f "$toom_home/$wad_name" ] || cp "$wad_path" "$toom_home/$wad_name"
+    done
+fi
+
+runtime="${XDG_RUNTIME_DIR:-/tmp}/temple4-toom-$USER"
+rm -rf "$runtime"
+mkdir -p "$runtime/T"
+
+for path in /T/*; do
+    [ -e "$path" ] || continue
+    name="$(basename "$path")"
+    [ "$name" = "Home" ] && continue
+    [ "$name" = "Once.HC" ] && continue
+    ln -s "$path" "$runtime/T/$name"
+done
+mkdir -p "$runtime/T/Home/TOOM"
+cp -a "$toom_home"/. "$runtime/T/Home/TOOM"/
+
+cat > "$runtime/T/Once.HC" <<'HC'
+#define TOOM_NO_MULTIPLAYER "1"
+Cd("T:/Home/TOOM");;
+#include "SinglePlayer.HC";;
+HC
+
+set +e
+exodus -f /usr/share/exodus/HCRT.BIN -t "$runtime/T"
+status=$?
+set -e
+
+mkdir -p "$toom_home"
+cp -a "$runtime/T/Home/TOOM"/. "$toom_home"/
+exit "$status"
+EOF
+
+    chmod +x "$root/usr/local/bin/temple4-run-toom"
+
+    cat > "$root/usr/local/bin/temple4-run-toom-templeos" <<'EOF'
+#!/bin/sh
+set -u
+
+pause_and_exit() {
+    status="${1:-1}"
+    printf '\nPress Enter to close this terminal... '
+    read _answer || true
+    exit "$status"
+}
+
+fail() {
+    printf '%s\n' "$1" >&2
+    pause_and_exit 1
+}
+
+if ! command -v qemu-system-x86_64 >/dev/null 2>&1; then
+    zenity --error --text='QEMU is not installed in this live image.' 2>/dev/null || printf '%s\n' 'QEMU is not installed in this live image.' >&2
+    pause_and_exit 1
+fi
+
+if ! command -v qemu-img >/dev/null 2>&1; then
+    zenity --error --text='qemu-img is not installed in this live image.' 2>/dev/null || printf '%s\n' 'qemu-img is not installed in this live image.' >&2
+    pause_and_exit 1
+fi
+
+if ! command -v xorriso >/dev/null 2>&1; then
+    zenity --error --text='xorriso is not installed in this live image.' 2>/dev/null || printf '%s\n' 'xorriso is not installed in this live image.' >&2
+    pause_and_exit 1
+fi
+
+temple_iso=""
+for iso in "$HOME/Terry/TempleOS.ISO" "/run/live/medium/Temple4/TempleOS.ISO"; do
+    if [ -f "$iso" ]; then
+        temple_iso="$iso"
+        break
+    fi
+done
+
+if [ -z "$temple_iso" ]; then
+    fail 'TempleOS.ISO was not found in ~/Terry or /run/live/medium/Temple4.'
+fi
+
+if [ ! -d /opt/toom ]; then
+    fail 'TOOM was not found at /opt/toom.'
+fi
+
+vm_dir="${TEMPLE4_TOOM_TEMPLEOS_HOME:-$HOME/TempleOS/TOOM}"
+disk="$vm_dir/TempleOS-TOOM.qcow2"
+transfer="$vm_dir/transfer"
+toom_iso="$vm_dir/TOOM-transfer.iso"
+mkdir -p "$transfer"
+
+if [ ! -f "$disk" ]; then
+    qemu-img create -f qcow2 "$disk" 512M >/dev/null || fail "Failed to create persistent disk: $disk"
+fi
+
+cp -a /opt/toom/. "$transfer"/ || fail "Failed to copy TOOM into transfer staging directory: $transfer"
+
+cat > "$transfer/RunTOOM.HC" <<'HC'
+U8 *src=NULL;
+if(FileFind("D:/Install.HC")) src="D:";
+else if(FileFind("U:/Install.HC")) src="U:";
+else if(FileFind("V:/Install.HC")) src="V:";
+else if(FileFind("W:/Install.HC")) src="W:";
+else if(FileFind("S:/Install.HC")) src="S:";
+else if(FileFind("T:/Install.HC")) src="T:";
+if(!src) {
+  "TOOM transfer drive was not found.\n";
+  "Try Dir; on D:, U:, V:, W:, S:, and T: to find RunTOOM.HC.\n";
+  throw('TOOM');
+}
+CopyTree(MStrPrint("%s/",src),"C:/Home/TOOM");;
+Del("C:/Home/TOOM/Install.HC");;
+Cd("C:/Home/TOOM");;
+#include "SinglePlayer.HC";;
+HC
+
+cat > "$transfer/README.TXT" <<'TXT'
+Temple4 TOOM transfer drive
+
+If TempleOS does not auto-open this CD, find the extra CD drive and run:
+
+  #include "U:/RunTOOM.HC";
+
+The script copies TOOM into C:/Home/TOOM on the persistent disk, then launches
+SinglePlayer.HC.
+TXT
+
+xorriso -as mkisofs -quiet -R -J -V TOOM -o "$toom_iso" "$transfer" || fail "Failed to create TOOM transfer ISO: $toom_iso"
+
+if [ ! -f "$toom_iso" ]; then
+    fail "TOOM transfer ISO was not created: $toom_iso"
+fi
+
+log="${XDG_RUNTIME_DIR:-/tmp}/temple4-toom-templeos-qemu.log"
+
+cat <<MSG
+Starting TempleOS with TOOM support.
+
+Persistent TempleOS disk:
+  $disk
+
+TOOM transfer drive:
+  $toom_iso
+
+QEMU log:
+  $log
+
+Inside TempleOS, run this if TOOM does not start automatically:
+  #include "U:/RunTOOM.HC";
+
+If U: is not the TOOM CD, try D:, V:, W:, or S: with the same RunTOOM.HC path.
+MSG
+
+set +e
+NO_AT_BRIDGE=1 GTK_A11Y=none qemu-system-x86_64 \
+    -m 512 \
+    -cdrom "$temple_iso" \
+    -boot d \
+    -drive "file=$disk,format=qcow2,if=ide,index=0,media=disk" \
+    -drive "file=$toom_iso,format=raw,if=ide,index=3,media=cdrom,readonly=on" \
+    -display gtk,gl=off \
+    -name "TempleOS TOOM" 2>"$log"
+status=$?
+set -e
+
+if [ "$status" -ne 0 ]; then
+    printf '\nTempleOS TOOM QEMU exited with status %s.\n' "$status" >&2
+    printf '%s\n' 'If the log only mentions org.freedesktop accessibility bus address, that GTK warning is harmless.' >&2
+    printf 'QEMU stderr log:\n' >&2
+    sed -n '1,160p' "$log" >&2
+fi
+
+pause_and_exit "$status"
+EOF
+
+    chmod +x "$root/usr/local/bin/temple4-run-toom-templeos"
+
+    cat > "$root/usr/local/bin/temple4-toom-wad" <<'EOF'
+#!/bin/sh
+set -eu
+
+toom_home="${TOOM_HOME:-$HOME/TOOM}"
+mkdir -p "$toom_home"
+if [ ! -f "$toom_home/SinglePlayer.HC" ]; then
+    cp -a /opt/toom/. "$toom_home"/
+else
+    (cd /opt/toom && find . -type f ! -iname '*.wad' ! -path './freedoom-0.12.1/*' -print) | while IFS= read -r path; do
+        mkdir -p "$toom_home/$(dirname "$path")"
+        cp "/opt/toom/$path" "$toom_home/$path"
+    done
+fi
+
+choose_with_zenity() {
+    zenity --file-selection \
+        --title='Choose a DOOM WAD for TOOM' \
+        --file-filter='DOOM WAD files | *.wad *.WAD' \
+        --file-filter='All files | *'
+}
+
+wad="${1:-}"
+if [ -z "$wad" ] && command -v zenity >/dev/null 2>&1; then
+    wad="$(choose_with_zenity || true)"
+fi
+
+if [ -z "$wad" ]; then
+    cat <<MSG
+Usage:
+  temple4-toom-wad /path/to/file.wad
+
+Bundled WADs are already installed in:
+  $toom_home
+
+To play with the current setup, run:
+  temple4-run-toom
+MSG
+    exit 0
+fi
+
+if [ ! -f "$wad" ]; then
+    printf '%s\n' "WAD not found: $wad" >&2
+    exit 1
+fi
+
+cp "$wad" "$toom_home/doom1.wad"
+printf '%s\n' "Installed WAD as $toom_home/doom1.wad"
+
+if command -v zenity >/dev/null 2>&1; then
+    zenity --question --text='WAD installed. Launch TOOM now?' && exec temple4-run-toom
+fi
+EOF
+
+    chmod +x "$root/usr/local/bin/temple4-toom-wad"
 
     # Create temple4-terminal wrapper script
     cat > "$root/usr/local/bin/temple4-terminal" <<'EOF'
@@ -286,7 +679,7 @@ EOF
 [Desktop Entry]
 Type=Application
 Name=TempleOS
-Comment=Boot TempleOS in QEMU
+Comment=Boot TempleOS in QEMU with persistent storage
 Exec=temple4-run-templeos
 Terminal=false
 Categories=System;Emulator;
@@ -298,7 +691,7 @@ EOF
 [Desktop Entry]
 Type=Application
 Name=ZealOS
-Comment=Boot ZealOS in QEMU
+Comment=Boot ZealOS in QEMU with persistent storage
 Exec=temple4-run-zealos
 Terminal=false
 Categories=System;Emulator;
@@ -318,10 +711,63 @@ StartupNotify=false
 X-XFCE-Trusted=true
 EOF
 
+    cat > "$root/usr/share/applications/temple4-toom.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=TOOM
+Comment=Launch the TempleOS DOOM port through Exodus
+Exec=temple4-run-toom
+Terminal=false
+Categories=Game;ActionGame;Emulator;
+StartupNotify=false
+X-XFCE-Trusted=true
+EOF
+
+    cat > "$root/usr/share/applications/temple4-toom-templeos.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=TOOM in TempleOS
+Comment=Boot TempleOS with a persistent TOOM disk
+Exec=temple4-terminal -e temple4-run-toom-templeos
+Terminal=false
+Categories=Game;ActionGame;Emulator;
+StartupNotify=false
+X-XFCE-Trusted=true
+EOF
+
+    cat > "$root/usr/share/applications/temple4-toom-wad.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=TOOM WAD Setup
+Comment=Choose a DOOM WAD for TOOM
+Exec=temple4-toom-wad
+Terminal=false
+Categories=Game;ActionGame;Settings;
+StartupNotify=false
+X-XFCE-Trusted=true
+EOF
+
+    cat > "$root/usr/share/applications/temple4-holy-linux.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=Holy-Linux
+Comment=Boot HolyC Linux userspace in a QEMU terminal
+Exec=temple4-terminal -e temple4-run-holy-linux
+Terminal=false
+Categories=System;Emulator;Development;
+StartupNotify=false
+X-XFCE-Trusted=true
+EOF
+
     cp "$root/usr/share/applications/temple4-templeos.desktop" "$root/etc/skel/Desktop/TempleOS.desktop"
     cp "$root/usr/share/applications/temple4-zealos.desktop" "$root/etc/skel/Desktop/ZealOS.desktop"
     cp "$root/usr/share/applications/temple4-exodus.desktop" "$root/etc/skel/Desktop/Exodus.desktop"
-    chmod +x "$root/etc/skel/Desktop/TempleOS.desktop" "$root/etc/skel/Desktop/ZealOS.desktop" "$root/etc/skel/Desktop/Exodus.desktop"
+    cp "$root/usr/share/applications/temple4-toom.desktop" "$root/etc/skel/Desktop/TOOM.desktop"
+    cp "$root/usr/share/applications/temple4-holy-linux.desktop" "$root/etc/skel/Desktop/Holy-Linux.desktop"
+    chmod +x "$root/etc/skel/Desktop/TempleOS.desktop" "$root/etc/skel/Desktop/ZealOS.desktop" "$root/etc/skel/Desktop/Exodus.desktop" "$root/etc/skel/Desktop/TOOM.desktop" "$root/etc/skel/Desktop/Holy-Linux.desktop"
+    rm -f "$root/usr/share/applications/temple4-toom-quickstart.desktop"
+    rm -f "$root/etc/skel/Desktop/TOOM in TempleOS.desktop"
+    rm -f "$root/etc/skel/Desktop/TOOM Quick Start.desktop" "$root/etc/skel/Desktop/TOOM WAD Setup.desktop"
     rm -f "$root/etc/skel/Desktop/calamares-install-debian.desktop" "$root/etc/skel/Desktop/"*calamares*.desktop
     rm -f "$root/etc/xdg/autostart/calamares-desktop-icon.desktop"
 
@@ -331,7 +777,11 @@ EOF
         cp "$root/usr/share/applications/temple4-templeos.desktop" "$root/home/user/Desktop/TempleOS.desktop"
         cp "$root/usr/share/applications/temple4-zealos.desktop" "$root/home/user/Desktop/ZealOS.desktop"
         cp "$root/usr/share/applications/temple4-exodus.desktop" "$root/home/user/Desktop/Exodus.desktop"
-        chmod +x "$root/home/user/Desktop/TempleOS.desktop" "$root/home/user/Desktop/ZealOS.desktop" "$root/home/user/Desktop/Exodus.desktop"
+        cp "$root/usr/share/applications/temple4-toom.desktop" "$root/home/user/Desktop/TOOM.desktop"
+        cp "$root/usr/share/applications/temple4-holy-linux.desktop" "$root/home/user/Desktop/Holy-Linux.desktop"
+        chmod +x "$root/home/user/Desktop/TempleOS.desktop" "$root/home/user/Desktop/ZealOS.desktop" "$root/home/user/Desktop/Exodus.desktop" "$root/home/user/Desktop/TOOM.desktop" "$root/home/user/Desktop/Holy-Linux.desktop"
+        rm -f "$root/home/user/Desktop/TOOM in TempleOS.desktop"
+        rm -f "$root/home/user/Desktop/TOOM Quick Start.desktop" "$root/home/user/Desktop/TOOM WAD Setup.desktop"
         if [ -d "$CIA_DIR" ]; then
             cp -a "$CIA_DIR"/. "$root/home/user/Terry"/
             rm -f "$root/home/user/Terry"/*.deb "$root/home/user/Terry"/*.rpm 2>/dev/null || true
@@ -343,7 +793,7 @@ EOF
 #!/bin/sh
 set -eu
 
-for launcher in "$HOME/Desktop/TempleOS.desktop" "$HOME/Desktop/ZealOS.desktop" "$HOME/Desktop/Exodus.desktop" "$HOME/Desktop/HolyC Demo.desktop" "$HOME/Desktop/Install Temple4.desktop"; do
+for launcher in "$HOME/Desktop/TempleOS.desktop" "$HOME/Desktop/ZealOS.desktop" "$HOME/Desktop/Exodus.desktop" "$HOME/Desktop/TOOM.desktop" "$HOME/Desktop/Holy-Linux.desktop" "$HOME/Desktop/HolyC Demo.desktop" "$HOME/Desktop/Install Temple4.desktop"; do
     [ -f "$launcher" ] || continue
     chmod +x "$launcher" 2>/dev/null || true
     if command -v gio >/dev/null 2>&1; then
@@ -1082,6 +1532,39 @@ EOF
     fi
 }
 
+install_holy_linux_tools() {
+    local root="$1"
+    local holy_linux_src="$SCRIPT_DIR/third_party/Holy-Linux-main"
+
+    if [ ! -d "$holy_linux_src" ]; then
+        echo "WARNING: Holy-Linux source was not found at $holy_linux_src; skipping Holy-Linux launcher payload." >&2
+        return 0
+    fi
+
+    echo "Installing Holy-Linux payload..."
+
+    mkdir -p "$root/opt/holy-linux"
+    rm -rf "$root/opt/holy-linux"/*
+    cp -a "$holy_linux_src"/. "$root/opt/holy-linux"/
+}
+
+install_toom_tools() {
+    local root="$1"
+    local toom_src="$SCRIPT_DIR/third_party/TOOM-main"
+
+    if [ ! -d "$toom_src" ]; then
+        echo "WARNING: TOOM source was not found at $toom_src; skipping TOOM launcher payload." >&2
+        return 0
+    fi
+
+    echo "Installing TOOM payload..."
+
+    mkdir -p "$root/opt/toom" "$root/T/Home/TOOM"
+    rm -rf "$root/opt/toom"/* "$root/T/Home/TOOM"/*
+    cp -a "$toom_src"/. "$root/opt/toom"/
+    cp -a "$toom_src"/. "$root/T/Home/TOOM"/
+}
+
 install_templeos_theme_assets() {
     local root="$1"
     local theme_src="$SCRIPT_DIR/third_party/TempleOS-Theme"
@@ -1277,7 +1760,7 @@ EOF
     # Purge conflicting NetworkManager package to prevent clashes with ConnMan
     chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y purge network-manager || true
 
-    chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends qemu-system-x86 qemu-system-gui qemu-utils libsdl2-2.0-0 firefox-esr fontconfig libfontconfig1 libwayland-client0 libxkbcommon0 libegl1 libgl1 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libx11-6 libx11-xcb1 libxcb1 libxcb-randr0 libxcb-xfixes0 libxkbcommon-x11-0 libxcursor1 libxi6 libxrandr2 python3 python3-docopt python3-pycparser connman connman-ui cmst wpasupplicant ca-certificates firmware-linux firmware-misc-nonfree firmware-nvidia-graphics firmware-iwlwifi firmware-realtek firmware-atheros firmware-brcm80211 cool-retro-term gdebi calamares lightdm xserver-xorg-video-nouveau mesa-utils vulkan-tools pciutils dosfstools mtools ntfs-3g exfatprogs btrfs-progs xfsprogs parted udisks2 cryptsetup libegl-mesa0 libgbm1 lvm2 thin-provisioning-tools debian-archive-keyring
+    chroot "$root" env DEBIAN_FRONTEND=noninteractive apt-get -y install --no-install-recommends qemu-system-x86 qemu-system-gui qemu-utils xorriso libsdl2-2.0-0 firefox-esr fontconfig libfontconfig1 libwayland-client0 libxkbcommon0 libegl1 libgl1 libvulkan1 mesa-vulkan-drivers libgl1-mesa-dri libglx-mesa0 libx11-6 libx11-xcb1 libxcb1 libxcb-randr0 libxcb-xfixes0 libxkbcommon-x11-0 libxcursor1 libxi6 libxrandr2 python3 python3-docopt python3-pycparser connman connman-ui cmst wpasupplicant ca-certificates firmware-linux firmware-misc-nonfree firmware-nvidia-graphics firmware-iwlwifi firmware-realtek firmware-atheros firmware-brcm80211 cool-retro-term zenity gdebi calamares lightdm xserver-xorg-video-nouveau mesa-utils vulkan-tools pciutils dosfstools mtools ntfs-3g exfatprogs btrfs-progs xfsprogs parted udisks2 cryptsetup libegl-mesa0 libgbm1 lvm2 thin-provisioning-tools debian-archive-keyring
 
     # Explicitly enable ConnMan service
     chroot "$root" systemctl enable connman || true
@@ -1336,6 +1819,8 @@ EOF
     sed -i 's|^user:x:1000:1000:.*:/home/user:/bin/bash$|user:x:1000:1000:Temple4 User,,,:/home/user:/bin/bash|' "$LIVE_ROOT/etc/passwd"
 
     install_holyc_tools "$LIVE_ROOT"
+    install_holy_linux_tools "$LIVE_ROOT"
+    install_toom_tools "$LIVE_ROOT"
     install_templeos_theme_assets "$LIVE_ROOT"
     write_livefs_launchers "$LIVE_ROOT"
     write_default_wallpaper "$LIVE_ROOT"

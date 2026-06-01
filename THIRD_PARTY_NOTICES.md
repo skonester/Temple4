@@ -39,6 +39,15 @@ HolyC-for-Linux is bundled from `jamesalbert/HolyC-for-Linux` and is licensed
 under the MIT License. Temple4 installs it under `/opt/holyc-for-linux` with a
 small local `holyc` wrapper and demo launcher.
 
+Holy-Linux is bundled from `NickIBrody/Holy-Linux`. Temple4 installs it under
+`/opt/holy-linux` and provides a terminal launcher that boots its Linux
+kernel/initramfs payload in QEMU without using its UEFI disk image path.
+
+TOOM is bundled from `austings/TOOM`. Temple4 installs it under `/opt/toom` and
+under the Exodus `/T/Home/TOOM` tree, then launches it through Exodus as a
+TempleOS-family application. Bundled WAD files retain their own upstream
+licensing terms.
+
 TempleOS-Theme assets are bundled from `PhilipPanda/TempleOS-Theme` and are
 licensed under the MIT License. Temple4 uses the portable icon theme, cursor
 theme, and `templeos_font.ttf` font assets for XFCE defaults; Openbox-specific

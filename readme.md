@@ -1,7 +1,7 @@
 # Temple4
 
 <p align="center">
-  <img src="Temple4.png" alt="Temple4" width="360">
+  <img src="splash.png" alt="Temple4" width="360">
 </p>
 
 <p align="center">
@@ -45,9 +45,12 @@ payloads, desktop shortcuts, installer, and Linux tooling by hand.
 - Debian Trixie base with a GNU Linux-libre kernel
 - XFCE desktop with LightDM live-session autologin
 - BIOS and UEFI boot support through ISOLINUX and GRUB
-- TempleOS and ZealOS launchers using QEMU
+- TempleOS and ZealOS launchers using QEMU with persistent qcow2 storage
 - Native Exodus launcher when the Exodus appliance package is present
+- TOOM launcher for the TempleOS DOOM port through Exodus
+- TOOM-in-TempleOS launcher with a persistent QEMU disk and transfer drive
 - HolyC-for-Linux wrapper and demo through `holyc` and `holyc-demo`
+- Holy-Linux launcher for a HolyC-oriented Linux userspace guest in QEMU
 - Calamares installer integration through `temple4-install`
 - Cool Retro Term wrapper as the default terminal
 - Firefox ESR as the default browser
@@ -136,7 +139,10 @@ Temple4 includes desktop and application-menu launchers for:
 - TempleOS in QEMU
 - ZealOS in QEMU
 - Exodus as a native Linux application
+- TOOM through the Exodus TempleOS appliance
+- TOOM in real TempleOS through QEMU
 - HolyC-for-Linux as a local command and demo
+- Holy-Linux as a QEMU terminal guest
 - Cool Retro Term as the default Linux terminal
 - The Temple4 installer
 
@@ -146,6 +152,10 @@ Command-line launchers are available too:
 temple4-run-templeos
 temple4-run-zealos
 temple4-run-exodus
+temple4-run-toom
+temple4-run-toom-templeos
+temple4-toom-wad
+temple4-run-holy-linux
 holyc
 holyc-demo
 temple4-terminal
@@ -168,6 +178,15 @@ Installer packages from the payload folder are used during image creation or
 kept on the ISO payload area, but raw `.deb` and `.rpm` files are removed from
 `/home/user/Terry` and `/etc/skel/Terry` before the final live filesystem is
 packed.
+
+The TempleOS and ZealOS QEMU launchers create persistent disks in the user's
+home directory, so the same launcher behavior works from both the live session
+and an installed Temple4 system:
+
+```text
+~/TempleOS/TempleOS/TempleOS.qcow2
+~/TempleOS/ZealOS/ZealOS.qcow2
+```
 
 ## Desktop Details
 
@@ -321,9 +340,32 @@ also works when launched as root with `wsl.exe -d Debian -u root`.
 
 Temple4 does not make TempleOS run on top of Linux. TempleOS and ZealOS remain
 separate operating system images launched through QEMU, where they run as guest
-systems behind virtual hardware. Exodus is different: it is a userspace port of
-TempleOS concepts for Linux, Windows, and FreeBSD, and Temple4 includes it as a
-separate study tool.
+systems behind virtual hardware. Their launchers still boot from the bundled ISO
+payloads, but attach reusable qcow2 disks under `~/TempleOS` so installs and
+guest-side changes survive across launches. Exodus is different: it is a
+userspace port of TempleOS concepts for Linux, Windows, and FreeBSD, and
+Temple4 includes it as a separate study tool.
+
+Holy-Linux sits between those models. Temple4 installs it under
+`/opt/holy-linux` and launches it in its own terminal as a tiny QEMU guest using
+Holy-Linux's direct Linux kernel plus initramfs path. Temple4 does not use
+Holy-Linux's UEFI disk image or bootloader path, because Temple4 is already a
+full bootable distribution.
+
+TOOM is a TempleOS DOOM source port, so Temple4 keeps two launch paths. The
+desktop `TOOM` launcher routes it through Exodus as the userspace path. The
+application menu also includes `TOOM in TempleOS`, which boots the real
+TempleOS ISO in QEMU, creates a persistent disk at `~/TempleOS/TOOM`, and
+attaches a generated TOOM transfer CD containing TOOM plus `RunTOOM.HC`. If
+TempleOS does not auto-open the transfer CD, run `#include "U:/RunTOOM.HC";`
+inside TempleOS to copy TOOM into `C:/Home/TOOM` and start `SinglePlayer.HC`.
+If the TOOM CD appears under another drive letter, use that drive letter instead.
+
+The build installs TOOM under `/opt/toom` for reference. The first Exodus TOOM
+launch creates a writable copy at `~/TOOM`, then starts Exodus with a temporary
+`Once.HC` that includes `SinglePlayer.HC`. Use `temple4-toom-wad` or the TOOM
+WAD Setup menu item to pick a replacement WAD file; it installs the selected WAD
+as `~/TOOM/doom1.wad` and can launch TOOM immediately afterward.
 
 Linux is the carrier environment here. It gives the project reproducible live
 media tooling, QEMU packages, installer support, common hardware support, and a
